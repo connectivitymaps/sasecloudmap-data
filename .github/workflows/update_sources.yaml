@@ -1,0 +1,30 @@
+name: update dev data
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  environment:
+    name: python
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "install uv"
+        uses: astral-sh/setup-uv@v5
+
+      - name: "set up python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: "install dependencies"
+        run: uv sync
+
+      - name: "update dev data"
+        run: for i in src/provider_data/*.py; do echo $i; $i --refresh; done
