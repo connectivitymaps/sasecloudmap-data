@@ -4,9 +4,6 @@ on:
   push:
     branches: [ "main" ]
 
-env:
-  UV_SYSTEM_PYTHON: 1
-
 jobs:
   environment:
     name: python
@@ -15,18 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: "install uv"
-        uses: astral-sh/setup-uv@v5
-
       - name: "Set up Python"
         uses: actions/setup-python@v5
         with:
           python-version-file: "pyproject.toml"
 
-      - name: "install dependencies"
-        run: |
-          uv sync --all-extras --dev
-          uv pip install -e .
+      - run: pip install -r requirements.txt
 
       - name: "prep env"
         env:
