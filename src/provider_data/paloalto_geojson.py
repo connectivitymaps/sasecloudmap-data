@@ -14,8 +14,8 @@ from provider_data.lib.post_data import write_and_post
 def prompt_location(location):
     prompt = f"which is the largest city with an airport in {location}, please respond only with the city name and country. if the input is already a city, just respond with the initial input again. respond with absolutely nothing else, also no acknowledgement."
     req = httpx.post(
-        f"https://api.cloudflare.com/client/v4/accounts/{os.environ["CLOUDFLARE_ACCOUNT_ID"]}/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-        headers={"Authorization": f"Bearer {os.environ["CLOUDFLARE_API_TOKEN"]}"},
+        f"https://api.cloudflare.com/client/v4/accounts/{os.environ['CLOUDFLARE_ACCOUNT_ID']}/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+        headers={"Authorization": f"Bearer {os.environ['CLOUDFLARE_API_TOKEN']}"},
         json={
             "messages": [
                 {"role": "system", "content": "You are a friendly assistant"},

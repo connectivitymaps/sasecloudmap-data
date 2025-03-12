@@ -4,9 +4,6 @@ on:
   push:
     branches: [ "main" ]
 
-permissions:
-  contents: read
-
 jobs:
   environment:
     name: python
@@ -19,12 +16,15 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: "install dependencies"
-        run: uv sync
+        run: uv sync --all-extras --dev
 
       - name: "prep env"
         env:
           DOTENV: ${{ secrets.DOTENV }}
         run: echo -n $DOTENV | base64 -d > .env
+
+      - name: "load venv"
+        run: source .venv/bin/activate
 
       - name: "update dev data"
         run: for i in src/provider_data/*.py; do echo $i; $i --refresh; done
