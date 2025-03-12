@@ -32,4 +32,6 @@ jobs:
         run: source .venv/bin/activate
 
       - name: "update dev data"
+        env:
+          PYTHONPATH: .
         run: for i in src/provider_data/*.py; do echo $i; uv run $i --refresh; done
