@@ -25,4 +25,4 @@ jobs:
         run: echo -n $DOTENV | base64 -d > .env
 
       - name: "update dev data"
-        run: for i in src/provider_data/*.py; do echo $i; $i --refresh; done
+        run: for i in src/provider_data/*.py; do echo $i; python $i --refresh; done
