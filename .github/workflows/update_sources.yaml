@@ -4,6 +4,9 @@ on:
   push:
     branches: [ "main" ]
 
+env:
+  UV_SYSTEM_PYTHON: 1
+
 jobs:
   environment:
     name: python
@@ -17,7 +20,13 @@ jobs:
         with:
           python-version-file: "pyproject.toml"
 
-      - run: pip install -r requirements.txt
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install the project
+        run: uv sync --all-extras --dev
+
+      # - run: pip install -r requirements.txt
 
       - name: "prep env"
         env:
@@ -26,3 +35,4 @@ jobs:
 
       - name: "update dev data"
         run: for i in src/provider_data/*.py; do echo $i; python $i --refresh; done
+        working-directory: src
