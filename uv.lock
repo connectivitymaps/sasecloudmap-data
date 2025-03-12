@@ -1,4 +1,5 @@
 version = 1
+revision = 1
 requires-python = ">=3.12"
 
 [[package]]
@@ -253,7 +254,7 @@ requires-dist = [
     { name = "packaging", specifier = "==24.2" },
     { name = "playwright", specifier = "==1.50.0" },
     { name = "pluggy", specifier = "==1.5.0" },
-    { name = "provider-data", editable = "." },
+    { name = "provider-data" },
     { name = "pyee", specifier = "==12.1.1" },
     { name = "pytest", specifier = "==8.3.5" },
     { name = "pytest-base-url", specifier = "==2.1.0" },
