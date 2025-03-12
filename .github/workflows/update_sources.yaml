@@ -4,6 +4,9 @@ on:
   push:
     branches: [ "main" ]
 
+env:
+  UV_SYSTEM_PYTHON: 1
+
 jobs:
   environment:
     name: python
@@ -15,20 +18,20 @@ jobs:
       - name: "install uv"
         uses: astral-sh/setup-uv@v5
 
-      - name: Install Python 3.12
-        run: uv python install 3.12
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
 
       - name: "install dependencies"
         run: |
           uv sync --all-extras --dev
+          uv pip install -e .
 
       - name: "prep env"
         env:
           DOTENV: ${{ secrets.DOTENV }}
         run: echo -n $DOTENV | base64 -d > .env
 
-      - name: "load venv"
-        run: source .venv/bin/activate
-
       - name: "update dev data"
-        run: for i in src/provider_data/*.py; do echo $i; uv run $i --refresh; done
+        run: for i in src/provider_data/*.py; do echo $i; $i --refresh; done
