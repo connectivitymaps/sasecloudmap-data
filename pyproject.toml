@@ -34,5 +34,5 @@ dependencies = [
     "provider-data",
 ]
 
-[tool.uv.sources]
-provider-data = { workspace = true }
+[tool.uv]
+package = true
