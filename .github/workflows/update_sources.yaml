@@ -12,9 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Allow uv to use the system Python by default
-        run: echo "UV_SYSTEM_PYTHON=true" >> $GITHUB_ENV
-
       - name: "install uv"
         uses: astral-sh/setup-uv@v5
 
@@ -22,7 +19,9 @@ jobs:
         run: uv python install 3.12
 
       - name: "install dependencies"
-        run: uv sync --all-extras --dev
+        run: |
+          uv sync --all-extras --dev
+          uv add -r requirements.txt
 
       - name: "prep env"
         env:
@@ -30,4 +29,4 @@ jobs:
         run: echo -n $DOTENV | base64 -d > .env
 
       - name: "update dev data"
-        run: for i in src/provider_data/*.py; do echo $i; uv run $i --refresh; done
+        run: for i in src/provider_data/*.py; do echo $i; $i --refresh; done
