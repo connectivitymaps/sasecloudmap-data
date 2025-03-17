@@ -3,6 +3,8 @@ name: update dev data
 on:
   push:
     branches: [ "main" ]
+  schedule:
+    - cron: '0 18 * * 1'
 
 jobs:
   environment:
@@ -17,6 +19,7 @@ jobs:
           DOTENV: ${{ secrets.DOTENV }}
         run: |
           echo -n $DOTENV | base64 -d > .env
+          mkdir output
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@v5
@@ -30,4 +33,4 @@ jobs:
           echo PATH=$PATH >> $GITHUB_ENV
 
       - name: "update dev data"
-        run: for i in provider_data/*.py; do echo $i; uv run $i --refresh; done
+        run: for i in provider_data/*.py; do echo $i; uv run $i --refresh --dev; done
