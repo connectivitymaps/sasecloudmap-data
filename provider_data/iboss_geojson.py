@@ -3,43 +3,34 @@ import argparse
 import sys
 import json
 from urllib.parse import quote_plus
-from bs4 import BeautifulSoup
 import httpx
-from provider_data.lib.skeleton import geojson_skeleton
-from provider_data.lib.post_data import write_and_post
+from lib.skeleton import geojson_skeleton
+from lib.post_data import write_and_post
 
 
 def get_data():
-    """get data from cisco"""
-    data = httpx.get(
-        "https://umbrella.cisco.com/why-umbrella/global-network-and-traffic"
+    """get cloudflare locations"""
+    colos = httpx.get(
+        "https://status.iboss.com/ibcloud/web/public/cloudStatus/dataCenters"
     )
-    data = data.text
-    soup = BeautifulSoup(data, "html.parser")
-    table = soup.select("#networks")
-    rows = table[0].find_all("tr")
+    colos = colos.json()
 
+    colos = [
+        item["name"].replace(" POP", "") for region in colos.values() for item in region
+    ]
     locations = []
+    for colo in colos:
+        req = httpx.get(
+            f"https://nominatim.openstreetmap.org/search?q={quote_plus(colo)}&format=jsonv2&polygon=1&addressdetails=1&limit=1"
+        )
+        output = req.json()
+        locations.append(
+            {
+                "name": output[0]["name"],
+                "coordinates": [output[0]["lat"], output[0]["lon"]],
+            }
+        )
 
-    for row in rows:
-        location = row.find("td")
-        try:
-            location = [ele.text.strip() for ele in location]
-            for loc in location:
-                req = httpx.get(
-                    "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
-                        quote_plus(loc)
-                    )
-                )
-                data = req.json()
-                locations.append(
-                    {
-                        "name": data[0]["name"],
-                        "coordinates": [data[0]["lat"], data[0]["lon"]],
-                    }
-                )
-        except TypeError:
-            pass
     return locations
 
 
@@ -59,8 +50,8 @@ def convert_to_geojson(data):
 
 
 if __name__ == "__main__":
-    provider_name = "cisco"
-    friendly_name = "Cisco Umbrella"
+    provider_name = "iboss"
+    friendly_name = "iboss"
     app_type = ["sase"]
 
     parser = argparse.ArgumentParser(

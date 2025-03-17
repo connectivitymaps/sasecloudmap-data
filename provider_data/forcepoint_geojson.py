@@ -5,8 +5,8 @@ import sys
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import httpx
-from provider_data.lib.skeleton import geojson_skeleton
-from provider_data.lib.post_data import write_and_post
+from lib.skeleton import geojson_skeleton
+from lib.post_data import write_and_post
 
 
 def get_data():

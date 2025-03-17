@@ -29,12 +29,5 @@ jobs:
           source .venv/bin/activate
           echo PATH=$PATH >> $GITHUB_ENV
 
-      - name: "debugggg"
-        run: |
-          type python
-
-      - name: "pythonpath"
-        run: echo "PYTHONPATH=$(pwd)/src" >> $GITHUB_ENV
-
       - name: "update dev data"
-        run: for i in src/provider_data/*.py; do echo $i; $i --refresh; done
+        run: for i in provider_data/*.py; do echo $i; uv run $i --refresh; done

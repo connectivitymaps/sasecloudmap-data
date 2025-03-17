@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 from urllib.parse import quote_plus
 from bs4 import BeautifulSoup
 import httpx
-from provider_data.lib.skeleton import geojson_skeleton
-from provider_data.lib.post_data import write_and_post
+from lib.skeleton import geojson_skeleton
+from lib.post_data import write_and_post
 
 
 def prompt_location(location):

@@ -4,8 +4,8 @@ import sys
 import json
 from bs4 import BeautifulSoup
 import httpx
-from provider_data.lib.skeleton import geojson_skeleton
-from provider_data.lib.post_data import write_and_post
+from lib.skeleton import geojson_skeleton
+from lib.post_data import write_and_post
 
 
 def convert_to_geojson(data):

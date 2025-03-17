@@ -1,51 +1,10 @@
 #!/usr/bin/env -S uv run
 import argparse
-import json
 import sys
-from urllib.parse import quote_plus
-from bs4 import BeautifulSoup
+import json
 import httpx
-from provider_data.lib.skeleton import geojson_skeleton
-from provider_data.lib.post_data import write_and_post
-
-
-def get_data():
-    data = httpx.get(
-        "https://sc1.checkpoint.com/documents/Infinity_Portal/WebAdminGuides/EN/SASE-Admin-Guide/Content/Topics-SASE-AG/Networks/Regions-PoP.htm"
-    )
-    data = data.text
-    soup = BeautifulSoup(data, "html.parser")
-    table = soup.select_one(
-        "#mc-main-content > table.TableStyle-TP_Table_Dark_Header_and_Pattern > tbody"
-    )
-
-    processed_location = []
-    for ele in table.find_all("li"):
-        text = "".join([i for i in ele.text if not i.isdigit()])
-        text = text.strip()
-        processed_location.append(text)
-
-    unique_locations = list(set(processed_location))
-    locations = []
-
-    for loc in unique_locations:
-        req = httpx.get(
-            "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
-                quote_plus(loc)
-            )
-        )
-        data = req.json()
-        try:
-            locations.append(
-                {
-                    "name": data[0]["place_id"],
-                    "coordinates": [data[0]["lat"], data[0]["lon"]],
-                }
-            )
-        except Exception:
-            print(loc)
-
-    return locations
+from lib.skeleton import geojson_skeleton
+from lib.post_data import write_and_post
 
 
 def convert_to_geojson(data):
@@ -60,12 +19,31 @@ def convert_to_geojson(data):
             "properties": {"city": city["name"]},
         }
         features.append(feature)
+
     return features
 
 
+def get_data():
+    """get data from zscaler"""
+    locations = []
+    data = httpx.get("https://config.zscaler.com/api/zscaler.net/cenr/json")
+    data = data.json()
+
+    for continent in data["zscaler.net"]:
+        for city, info in data["zscaler.net"][continent].items():
+            locations.append(
+                {
+                    "name": city,
+                    "coordinates": [info[0]["latitude"], info[0]["longitude"]],
+                }
+            )
+
+    return locations
+
+
 if __name__ == "__main__":
-    provider_name = "checkpoint"
-    friendly_name = "Check Point Harmony"
+    provider_name = "zscaler"
+    friendly_name = "Zscaler"
     app_type = ["sase"]
 
     parser = argparse.ArgumentParser(

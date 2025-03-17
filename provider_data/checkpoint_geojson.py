@@ -1,35 +1,41 @@
 #!/usr/bin/env -S uv run
 import argparse
-import sys
 import json
-import csv
-from io import StringIO
+import sys
 from urllib.parse import quote_plus
+from bs4 import BeautifulSoup
 import httpx
-from provider_data.lib.skeleton import geojson_skeleton
-from provider_data.lib.post_data import write_and_post
+from lib.skeleton import geojson_skeleton
+from lib.post_data import write_and_post
 
 
 def get_data():
-    colos = httpx.get(
-        "https://support.catonetworks.com/hc/en-us/article_attachments/15675587976477"
+    data = httpx.get(
+        "https://sc1.checkpoint.com/documents/Infinity_Portal/WebAdminGuides/EN/SASE-Admin-Guide/Content/Topics-SASE-AG/Networks/Regions-PoP.htm"
     )
-    pops = []
-    csv_file = StringIO(colos.text)
-    reader = csv.DictReader(csv_file, delimiter=",")
-    for row in reader:
-        pops.append(row["PoP\xa0Location"].strip())
+    data = data.text
+    soup = BeautifulSoup(data, "html.parser")
+    table = soup.select_one(
+        "#mc-main-content > table.TableStyle-TP_Table_Dark_Header_and_Pattern > tbody"
+    )
 
+    processed_location = []
+    for ele in table.find_all("li"):
+        text = "".join([i for i in ele.text if not i.isdigit()])
+        text = text.strip()
+        processed_location.append(text)
+
+    unique_locations = list(set(processed_location))
     locations = []
 
-    for pop in list(set(pops)):
-        try:
-            req = httpx.get(
-                "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
-                    quote_plus(pop)
-                )
+    for loc in unique_locations:
+        req = httpx.get(
+            "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
+                quote_plus(loc)
             )
-            data = req.json()
+        )
+        data = req.json()
+        try:
             locations.append(
                 {
                     "name": data[0]["place_id"],
@@ -37,9 +43,9 @@ def get_data():
                 }
             )
         except Exception:
-            pass
+            print(loc)
 
-    return [i for n, i in enumerate(locations) if i not in locations[n + 1 :]]
+    return locations
 
 
 def convert_to_geojson(data):
@@ -58,8 +64,8 @@ def convert_to_geojson(data):
 
 
 if __name__ == "__main__":
-    provider_name = "catonetworks"
-    friendly_name = "Cato Networks"
+    provider_name = "checkpoint"
+    friendly_name = "Check Point Harmony"
     app_type = ["sase"]
 
     parser = argparse.ArgumentParser(
