@@ -25,8 +25,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: "Install the project"
-        run: uv sync --all-extras
-        # run: uv sync --all-extras --dev
+        run: uv sync --all-extras --dev
+
+      - name: "debugggg"
+        run: |
+          type python
 
       # - name: "enable env"
       #   run: echo "PYTHONPATH=$(pwd)/src" >> $GITHUB_ENV
