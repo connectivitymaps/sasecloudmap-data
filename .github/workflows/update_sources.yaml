@@ -40,5 +40,5 @@ jobs:
       #     pip show provider-data
 
       - name: "update dev data"
-        run: for i in provider_data/*.py; do echo $i; $i --refresh; done
+        run: for i in provider_data/*.py; do echo $i; uv run $i --refresh; done
         working-directory: src
