@@ -23,8 +23,14 @@ jobs:
           DOTENV: ${{ secrets.DOTENV }}
         run: |
           echo -n $DOTENV | base64 -d > .env
+
+      - name: "enable env"
+        run: |
           source .venv/bin/activate
-          export PYTHONPATH=$PYTHONPATH:$(pwd)/src
+          echo "PYTHONPATH=$(pwd)/src" >> $GITHUB_ENV
+
+      - name: "enable env"
+        run: echo $PYTHONPATH
 
       - name: "update dev data"
         run: for i in provider_data/*.py; do echo $i; $i --refresh; done
