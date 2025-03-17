@@ -27,12 +27,12 @@ jobs:
       - name: "Install the project"
         run: uv sync --all-extras --dev
 
+      - name: "enable env"
+        run: source .venv/bin/activate
+
       - name: "debugggg"
         run: |
           type python
-
-      # - name: "enable env"
-      #   run: echo "PYTHONPATH=$(pwd)/src" >> $GITHUB_ENV
 
       # - name: "enable env"
       #   run: |
