@@ -31,7 +31,9 @@ jobs:
           source .venv/bin/activate
           echo PATH=$PATH >> $GITHUB_ENV
 
-      - run: mkdir output
+      - run: |
+          mkdir output
+          playwright install
 
       - name: "update dev data"
         run: for i in provider_data/*.py; do echo $i; uv run $i --refresh --dev; done
