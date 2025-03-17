@@ -28,7 +28,9 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: "enable env"
-        run: source .venv/bin/activate
+        run: |
+          source .venv/bin/activate
+          echo PATH=$PATH >> $GITHUB_ENV
 
       - name: "debugggg"
         run: |
