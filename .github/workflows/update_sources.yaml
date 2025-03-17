@@ -27,10 +27,8 @@ jobs:
         run: |
           echo -n $DOTENV | base64 -d > .env
 
-      - name: "enable env"
-        run: |
-          source .venv/bin/activate
-          echo "PYTHONPATH=$(pwd)/src" >> $GITHUB_ENV
+      # - name: "enable env"
+      #   run: echo "PYTHONPATH=$(pwd)/src" >> $GITHUB_ENV
 
       - name: "enable env"
         run: |
