@@ -36,4 +36,24 @@ jobs:
           playwright install
 
       - name: "update dev data"
-        run: for i in provider_data/*.py; do echo $i; uv run $i --refresh --dev; done
+        run: |
+          set +e
+          failed_scripts=()
+          for i in provider_data/*.py; do
+            echo "updating $i..."
+            uv run $i --refresh --dev
+            if [ $? -ne 0 ]; then
+              echo "WARNING: $i failed with exit code $?"
+              failed_scripts+=("$i")
+            fi
+          done
+          echo "------------------------------------"
+          if [ ${#failed_scripts[@]} -gt 0 ]; then
+            echo "WARNING: these updates failed:"
+            for script in "${failed_scripts[@]}"; do
+              echo "  - $script"
+            done
+            echo "continuing..."
+          else
+            echo "all updates completed successfully"
+          fi
