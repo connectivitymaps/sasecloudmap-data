@@ -4,9 +4,6 @@ on:
   push:
     branches: [ "main" ]
 
-env:
-  UV_SYSTEM_PYTHON: 1
-
 jobs:
   environment:
     name: python
@@ -42,5 +39,4 @@ jobs:
       #     pip show provider-data
 
       - name: "update dev data"
-        run: for i in provider_data/*.py; do echo $i; uv run $i --refresh; done
-        working-directory: src
+        run: for i in src/provider_data/*.py; do echo $i; uv run $i --refresh; done
