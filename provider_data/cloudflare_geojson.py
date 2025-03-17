@@ -4,8 +4,8 @@ import sys
 import json
 import re
 import httpx
-from lib.skeleton import geojson_skeleton
-from lib.post_data import write_and_post
+from utils.skeleton import geojson_skeleton
+from utils.post_data import write_and_post
 
 
 def get_cloudflare_data():

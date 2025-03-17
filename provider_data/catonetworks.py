@@ -6,8 +6,8 @@ import csv
 from io import StringIO
 from urllib.parse import quote_plus
 import httpx
-from lib.skeleton import geojson_skeleton
-from lib.post_data import write_and_post
+from utils.skeleton import geojson_skeleton
+from utils.post_data import write_and_post
 
 
 def get_data():

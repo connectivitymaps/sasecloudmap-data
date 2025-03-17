@@ -3,8 +3,8 @@ import argparse
 import sys
 import json
 import httpx
-from lib.skeleton import geojson_skeleton
-from lib.post_data import write_and_post
+from utils.skeleton import geojson_skeleton
+from utils.post_data import write_and_post
 
 
 def convert_to_geojson(data):
