@@ -24,6 +24,7 @@ jobs:
         run: |
           echo -n $DOTENV | base64 -d > .env
           source .venv/bin/activate
+          export PYTHONPATH=$PYTHONPATH:$(pwd)/src
 
       - name: "update dev data"
         run: for i in provider_data/*.py; do echo $i; $i --refresh; done
