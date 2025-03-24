@@ -2,51 +2,47 @@
 import argparse
 import sys
 import json
-import re
-from urllib.parse import quote_plus
-from bs4 import BeautifulSoup
 import httpx
 from utils.skeleton import geojson_skeleton
 from utils.post_data import write_and_post
 
 
 def get_data():
-    data = httpx.get("https://trust.netskope.com/")
-    data = data.text
-    soup = BeautifulSoup(data, "html.parser")
+    data = httpx.get("https://trust.netskope.com/ss/v1/datacenters")
+    data = data.json()
 
-    pattern_parentheses = re.compile(r"\(.*?\)")
-    pattern_asterisk = re.compile(r"\*")
-    processed_location = []
+    data_localized = httpx.get("https://trust.netskope.com/ss/v1/localizationzones")
+    data_localized = data_localized.json()
 
-    for ele in soup.find_all("span", class_="name"):
-        text = ele.text.strip()
-        if "(" in text and ")" in text:
-            cleaned_text = pattern_parentheses.sub("", text).strip()
-            cleaned_text = cleaned_text.encode("latin-1", "ignore").decode("latin-1")
-            cleaned_text = pattern_asterisk.sub("", cleaned_text).strip()
-            processed_location.append(cleaned_text)
-
-    unique_locations = list(set(processed_location))
     locations = []
+    seen = set()
 
-    for loc in unique_locations:
-        req = httpx.get(
-            "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
-                quote_plus(loc)
-            )
-        )
-        data = req.json()
-        try:
+    for loc in data:
+        location_key = loc["name"]
+        if location_key not in seen:
+            seen.add(location_key)
             locations.append(
                 {
-                    "name": data[0]["place_id"],
-                    "coordinates": [data[0]["lat"], data[0]["lon"]],
+                    "name": loc["name"],
+                    "coordinates": [
+                        loc["latitude"],
+                        loc["longitude"],
+                    ],
                 }
             )
-        except Exception as e:
-            print(e)
-
+    for loc in data_localized:
+        location_key = loc["airport_code"]
+        if location_key not in seen:
+            seen.add(location_key)
+            locations.append(
+                {
+                    "name": loc["airport_code"],
+                    "coordinates": [
+                        loc["latitude"],
+                        loc["longitude"],
+                    ],
+                }
+            )
     return locations
 
 
