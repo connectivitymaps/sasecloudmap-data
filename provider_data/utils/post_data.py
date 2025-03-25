@@ -14,7 +14,7 @@ def write_and_post(
     load_dotenv()
     headers = {
         "auth": os.environ["AUTH"],
-        "content-type": "applicatjon/json",
+        "content-type": "application/json",
     }
     payload = {}
     payload["friendlyName"] = friendly_name

@@ -47,6 +47,7 @@ jobs:
               failed_scripts+=("$i")
             fi
           done
+          uv run provider_data/utils/generate_sitemap.py
           echo "------------------------------------"
           if [ ${#failed_scripts[@]} -gt 0 ]; then
             echo "WARNING: these updates failed:"
