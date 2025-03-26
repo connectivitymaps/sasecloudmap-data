@@ -1,6 +1,7 @@
 import httpx
 import json
 import os
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 
@@ -15,6 +16,7 @@ def write_and_post(
     headers = {
         "auth": os.environ["AUTH"],
         "content-type": "application/json",
+        "bms": os.environ["BMS"],
     }
     payload = {}
     payload["friendlyName"] = friendly_name
@@ -30,7 +32,13 @@ def write_and_post(
             )
             print(f"dev update: {dev.text}")
     if update_prod:
-        dev = httpx.get(f"{os.environ['DEV_HOSTNAME']}{provider_name}")
+        url = os.environ["DEV_HOSTNAME"]
+        parsed_url = urlparse(url)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        dev = httpx.get(
+            f"{base_url}/api/{provider_name}",
+            headers={"bms": os.environ["BMS"]},
+        )
         payload["data"] = dev.json()
         prod = httpx.post(
             f"{os.environ['PROD_HOSTNAME']}{provider_name}",
