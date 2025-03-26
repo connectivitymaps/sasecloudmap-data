@@ -9,12 +9,13 @@ headers = {
     "content-type": "application/json",
 }
 
-url = os.environ["DEV_HOSTNAME"]
-parsed_url = urlparse(url)
-base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+urls = [os.environ["DEV_HOSTNAME"], os.environ["PROD_HOSTNAME"]]
+for url in urls:
+    parsed_url = urlparse(url)
+    base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
-dev = httpx.get(
-    f"{base_url}/sitemap",
-    headers=headers,
-)
-print(dev.text)
+    resp = httpx.get(
+        f"{base_url}/sitemap",
+        headers=headers,
+    )
+    print(f"updating {base_url}: {resp.text}")
