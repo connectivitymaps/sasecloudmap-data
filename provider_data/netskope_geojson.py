@@ -11,9 +11,6 @@ def get_data():
     data = httpx.get("https://trust.netskope.com/ss/v1/datacenters")
     data = data.json()
 
-    data_localized = httpx.get("https://trust.netskope.com/ss/v1/localizationzones")
-    data_localized = data_localized.json()
-
     locations = []
     seen = set()
 
@@ -30,19 +27,7 @@ def get_data():
                     ],
                 }
             )
-    for loc in data_localized:
-        location_key = loc["airport_code"]
-        if location_key not in seen:
-            seen.add(location_key)
-            locations.append(
-                {
-                    "name": loc["airport_code"],
-                    "coordinates": [
-                        loc["latitude"],
-                        loc["longitude"],
-                    ],
-                }
-            )
+
     return locations
 
 
