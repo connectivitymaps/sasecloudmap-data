@@ -97,7 +97,7 @@ jobs:
         env:
           WEBHOOK_URL: ${{ secrets.G_WEBHOOK }}
         run: |
-          curl -H "content-type: application/json" \
+          curl -s -H "content-type: application/json" \
             -d '{
               "text": "🚨 Provider Data Update Failed!\n\n
               Workflow: ${{ github.workflow }}\n
@@ -107,4 +107,4 @@ jobs:
               Triggered by: ${{ github.actor }}\n\n
               View details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             }' \
-            "${WEBHOOK_URL}"
+            "${WEBHOOK_URL}" >/dev/null
