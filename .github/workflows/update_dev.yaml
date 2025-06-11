@@ -8,7 +8,6 @@ on:
     - cron: '0 18 * * 1'
 
 jobs:
-  # Discover providers dynamically (simple approach)
   discover-providers:
     runs-on: ubuntu-latest
     outputs:
@@ -22,14 +21,13 @@ jobs:
           echo "providers=$providers" >> $GITHUB_OUTPUT
           echo "Found providers: $providers"
 
-  # Update each provider individually in parallel
   update-providers:
     needs: discover-providers
     runs-on: ubuntu-latest
     strategy:
       matrix:
         provider: ${{ fromJson(needs.discover-providers.outputs.providers) }}
-      fail-fast: false  # Continue running other providers even if one fails
+      fail-fast: false
 
     name: "Update ${{ matrix.provider }}"
 
@@ -57,11 +55,10 @@ jobs:
         run: |
           uv run provider_data/${{ matrix.provider }}.py --refresh --dev
 
-  # Generate sitemap after all providers finish
   generate-sitemap:
     needs: update-providers
     runs-on: ubuntu-latest
-    if: always()  # Run even if some providers failed
+    if: always()
 
     steps:
       - uses: actions/checkout@v4
@@ -80,4 +77,4 @@ jobs:
 
       - name: "Generate sitemap"
         run: |
-          uv run provider_data/utils/generate_sitemap.py
+          uv run provider_data/utils/generate_sitemap.py --dev
