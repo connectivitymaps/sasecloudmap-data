@@ -8,9 +8,30 @@ on:
     - cron: '0 18 * * 1'
 
 jobs:
-  environment:
-    name: python
+  # Discover providers dynamically (simple approach)
+  discover-providers:
     runs-on: ubuntu-latest
+    outputs:
+      providers: ${{ steps.find-providers.outputs.providers }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find provider scripts
+        id: find-providers
+        run: |
+          providers=$(for i in provider_data/*.py; do basename "$i" .py; done | grep -v utils | jq -R -s -c 'split("\n")[:-1]')
+          echo "providers=$providers" >> $GITHUB_OUTPUT
+          echo "Found providers: $providers"
+
+  # Update each provider individually in parallel
+  update-providers:
+    needs: discover-providers
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        provider: ${{ fromJson(needs.discover-providers.outputs.providers) }}
+      fail-fast: false  # Continue running other providers even if one fails
+
+    name: "Update ${{ matrix.provider }}"
 
     steps:
       - uses: actions/checkout@v4
@@ -27,35 +48,36 @@ jobs:
       - name: "Install the project"
         run: uv sync --all-extras --dev
 
-      - name: "enable env"
+      - name: "Install playwright"
         run: |
-          source .venv/bin/activate
-          echo PATH=$PATH >> $GITHUB_ENV
-
-      - run: |
-          mkdir output
+          mkdir -p output
           playwright install
 
-      - name: "update dev data"
+      - name: "Update ${{ matrix.provider }}"
         run: |
-          set +e
-          failed_scripts=()
-          for i in provider_data/*.py; do
-            echo "updating $i..."
-            uv run $i --refresh --dev
-            if [ $? -ne 0 ]; then
-              echo "WARNING: $i failed with exit code $?"
-              failed_scripts+=("$i")
-            fi
-          done
+          uv run provider_data/${{ matrix.provider }}.py --refresh --dev
+
+  # Generate sitemap after all providers finish
+  generate-sitemap:
+    needs: update-providers
+    runs-on: ubuntu-latest
+    if: always()  # Run even if some providers failed
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "prep env"
+        env:
+          DOTENV: ${{ secrets.DOTENV }}
+        run: |
+          echo -n $DOTENV | base64 -d > .env
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v5
+
+      - name: "Install the project"
+        run: uv sync --all-extras --dev
+
+      - name: "Generate sitemap"
+        run: |
           uv run provider_data/utils/generate_sitemap.py
-          echo "------------------------------------"
-          if [ ${#failed_scripts[@]} -gt 0 ]; then
-            echo "WARNING: these updates failed:"
-            for script in "${failed_scripts[@]}"; do
-              echo "  - $script"
-            done
-            echo "continuing..."
-          else
-            echo "all updates completed successfully"
-          fi
