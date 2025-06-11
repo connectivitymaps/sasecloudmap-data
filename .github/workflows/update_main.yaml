@@ -1,3 +1,4 @@
+---
 name: update main data
 
 on:
@@ -13,7 +14,9 @@ jobs:
       - name: Find provider scripts
         id: find-providers
         run: |
-          providers=$(for i in provider_data/*.py; do basename "$i" .py; done | grep -v utils | jq -R -s -c 'split("\n")[:-1]')
+          providers=$(for i in provider_data/*.py; do \
+            basename "$i" .py; done | grep -v utils | \
+            jq -R -s -c 'split("\n")[:-1]')
           echo "providers=$providers" >> $GITHUB_OUTPUT
           echo "Found providers: $providers"
 
@@ -74,3 +77,30 @@ jobs:
       - name: "Generate sitemap"
         run: |
           uv run provider_data/utils/generate_sitemap.py --prod
+
+  notify-on-failure:
+    needs: [discover-providers, update-providers, generate-sitemap]
+    runs-on: ubuntu-latest
+    if: >-
+      always() && (
+        needs.discover-providers.result == 'failure' ||
+        needs.update-providers.result == 'failure' ||
+        needs.generate-sitemap.result == 'failure'
+      )
+
+    steps:
+      - name: "Notify in Chat on Failure"
+        env:
+          WEBHOOK_URL: ${{ secrets.G_WEBHOOK }}
+        run: |
+          curl -H "content-type: application/json" \
+            -d '{
+              "text": "🚨 Provider Data Update Failed!\n\n
+              Workflow: ${{ github.workflow }}\n
+              Repository: ${{ github.repository }}\n
+              Branch: ${{ github.ref_name }}\n
+              Commit: ${{ github.sha }}\n
+              Triggered by: ${{ github.actor }}\n\n
+              View details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }' \
+            "${WEBHOOK_URL}"
