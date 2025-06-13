@@ -1,11 +1,13 @@
 #!/usr/bin/env -S uv run
 import argparse
-import sys
 import json
-from bs4 import BeautifulSoup
+import re
+import sys
+
 import httpx
-from utils.skeleton import geojson_skeleton
+from bs4 import BeautifulSoup
 from utils.post_data import write_and_post
+from utils.skeleton import geojson_skeleton
 
 
 def convert_to_geojson(data):
@@ -24,24 +26,47 @@ def convert_to_geojson(data):
     return features
 
 
-def resolve_locations(locations):
+def resolve_locations(airport_codes):
+    """resolve airport codes to geolocation"""
     data = []
-    for loc in locations:
-        city_country = loc.split("-")
-        city = city_country[0].strip()
-        country = city_country[1].split(" (")[0].strip()
-        geolocation = httpx.get(
-            f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&q={city},{country}"
-        )
-        resp = geolocation.json()
+    for code in airport_codes:
+        geometry = None
         try:
-            geometry = {
-                "name": city,
-                "coordinates": resp["features"][0]["geometry"]["coordinates"],
-            }
+            geolocation = httpx.get(f"https://iata.clumsy.dev/?q={code.lower()}")
+            resp = geolocation.json()
+            if resp.get("success"):
+                geometry = {
+                    "name": resp["name"],
+                    "coordinates": [resp["lon"], resp["lat"]],
+                }
+            else:
+                pass
+        except (KeyError, ValueError, httpx.RequestError) as e:
+            print(
+                f"API failed for airport code: {code}, error: {e}, trying fallback..."
+            )
+        if geometry is None:
+            try:
+                fallback_geolocation = httpx.get(
+                    f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&q={code}+airport"
+                )
+                fallback_resp = fallback_geolocation.json()
+                if fallback_resp.get("features"):
+                    geometry = {
+                        "name": f"{code} Airport",
+                        "coordinates": fallback_resp["features"][0]["geometry"][
+                            "coordinates"
+                        ],
+                    }
+                else:
+                    pass
+            except (KeyError, ValueError, httpx.RequestError) as e:
+                print(
+                    f"could not find coordinates for airport code: {code}, error: {e}"
+                )
+
+        if geometry:
             data.append(geometry)
-        except IndexError:
-            print(loc)
 
     return [x for x in data if x]
 
@@ -50,18 +75,23 @@ def get_data():
     colos = httpx.get(
         "https://docs.fortinet.com/document/fortisase/latest/reference-guide/663044/global-data-centers"
     )
-    soup = BeautifulSoup(colos, "html.parser")
+    soup = BeautifulSoup(colos.text, "html.parser")
     content = soup.find(id="mc-main-content")
-    table_body = content.find("tbody")
-    rows = table_body.find_all("tr")
+    locations = content.select(
+        "td.TableStyle-FortinetTable-BodyE-Column2-Body1, td.TableStyle-FortinetTable-BodyE-Column2-Body2"
+    )
 
-    data = []
-    for row in rows:
-        cols = row.find_all("td")
-        cols = [ele.text.strip() for ele in cols]
-        data.append(cols[1])
+    airport_codes = []
+    for loc in locations:
+        location_text = loc.get_text(strip=True)
+        if location_text and (" - " in location_text or "(" in location_text):
+            match = re.search(r"\(([A-Z]{3})-", location_text)
+            if match:
+                airport_code = match.group(1)
+                airport_codes.append(airport_code)
 
-    return data
+    unique_codes = list(dict.fromkeys(airport_codes))
+    return unique_codes
 
 
 if __name__ == "__main__":

@@ -3,14 +3,18 @@ name = "provider-data"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "ruff>=0.9",
     "httpx>=0.28",
     "beautifulsoup4>=4",
     "pytest-playwright>=0.7",
     "python-dotenv>=1.0",
+    "pre-commit>=4.2.0",
 ]
+
+[tool.setuptools]
+packages = ["provider_data"]
 
 [tool.uv]
 package = true

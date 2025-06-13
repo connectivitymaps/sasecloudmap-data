@@ -1,7 +1,8 @@
-import httpx
 import json
 import os
 from urllib.parse import urlparse
+
+import httpx
 from dotenv import load_dotenv
 
 

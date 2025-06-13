@@ -3,10 +3,11 @@ import argparse
 import json
 import sys
 from urllib.parse import quote_plus
-from bs4 import BeautifulSoup
+
 import httpx
-from utils.skeleton import geojson_skeleton
+from bs4 import BeautifulSoup
 from utils.post_data import write_and_post
+from utils.skeleton import geojson_skeleton
 
 
 def get_data():

@@ -1,11 +1,12 @@
 #!/usr/bin/env -S uv run
 import argparse
-import sys
 import json
 import re
+import sys
+
 import httpx
-from utils.skeleton import geojson_skeleton
 from utils.post_data import write_and_post
+from utils.skeleton import geojson_skeleton
 
 
 def get_cloudflare_data():
