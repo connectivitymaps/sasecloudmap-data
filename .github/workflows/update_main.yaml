@@ -45,14 +45,9 @@ jobs:
       - name: "Install the project"
         run: uv sync --all-extras --dev
 
-      - name: "Install playwright"
-        run: |
-          mkdir -p output
-          uv run playwright install
-
       - name: "Update ${{ matrix.provider }}"
         run: |
-          uv run provider_data/${{ matrix.provider }}.py --refresh --prod
+          uv run provider_data/${{ matrix.provider }}.py --prod
 
   generate-sitemap:
     needs: update-providers
