@@ -18,7 +18,7 @@ def get_data():
         "https://support.forcepoint.com/s/article/Cloud-service-data-center-IP-addresses-port-numbers"
     )
     location = page.locator(
-        "css=#ServiceCommunityTemplate > div.cCenterPanel > div > div.slds-grid.slds-wrap.slds-medium-nowrap.slds-large-nowrap > div.slds-col--padded.slds-size--12-of-12.slds-medium-size--8-of-12.slds-large-size--8-of-12.comm-layout-column > div > div:nth-child(1) > c-hub_-knowledge-article-page > div:nth-child(6) > div > div.slds-form-element__control.slds-grid.itemBody > span > span > table:nth-child(7)"
+        "css=#ServiceCommunityTemplate > div.cCenterPanel > div > div.slds-grid.slds-wrap.slds-medium-nowrap.slds-large-nowrap > div.slds-col--padded.slds-size--12-of-12.slds-medium-size--8-of-12.slds-large-size--8-of-12.comm-layout-column > div > div:nth-child(1) > c-hub_-knowledge-article-page > div:nth-child(7) > div > div.slds-form-element__control.slds-grid.itemBody > span > span > table:nth-child(7)"
     )
     location.scroll_into_view_if_needed()
     html = location.inner_html()
