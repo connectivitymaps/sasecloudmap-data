@@ -1,7 +1,6 @@
 #!/usr/bin/env -S uv run
 import argparse
 import json
-import os
 import sys
 from urllib.parse import quote_plus
 
@@ -12,44 +11,26 @@ from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
 
-def prompt_location(location):
-    prompt = f"which is the largest city with an airport in {location}, please respond only with the city name and country. if the input is already a city, just respond with the initial input again. respond with absolutely nothing else, also no acknowledgement."
-    req = httpx.post(
-        f"https://api.cloudflare.com/client/v4/accounts/{os.environ['CLOUDFLARE_ACCOUNT_ID']}/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-        headers={"Authorization": f"Bearer {os.environ['CLOUDFLARE_API_TOKEN']}"},
-        json={
-            "messages": [
-                {"role": "system", "content": "You are a friendly assistant"},
-                {"role": "user", "content": prompt},
-            ]
-        },
-    )
-    result = req.json()
-    return result["result"]["response"]
-
-
 def get_data():
     data = httpx.get(
-        "https://docs.paloaltonetworks.com/prisma/prisma-access/3-2/prisma-access-panorama-admin/prepare-the-prisma-access-infrastructure/list-of-prisma-access-locations/list-of-locations-by-region"
+        "https://docs.paloaltonetworks.com/prisma/prisma-access/3-2/prisma-access-panorama-admin/prepare-the-prisma-access-infrastructure/list-of-prisma-access-locations/list-of-locations-by-compute-location"
     )
     data = data.text
     soup = BeautifulSoup(data, "html.parser")
-    table = soup.select_one("#id089612c2-6bca-417d-8e99-f2af7c5a44fc > table")
+    table = soup.select_one("#idf6de761e-2601-46d8-a61a-aaeb5e030069 > table")
 
     processed_location = []
-    for ele in table.find_all("td"):
-        text = ele.text.strip()
-        if not text.endswith("Region"):
-            processed_location.append(text)
+    for row in table.tbody.find_all("tr"):
+        cities = row.find_all("td")[2].get_text(separator="\n", strip=True).split("\n")
+        processed_location.extend(cities)
 
     unique_locations = list(set(processed_location))
     locations = []
 
     for loc in unique_locations:
-        loc_data = prompt_location(loc)
         req = httpx.get(
             "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
-                quote_plus(loc_data)
+                quote_plus(loc)
             )
         )
         data = req.json()
