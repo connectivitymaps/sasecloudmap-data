@@ -13,7 +13,7 @@ from utils.skeleton import geojson_skeleton
 
 def get_data():
     colos = httpx.get(
-        "https://support.catonetworks.com/hc/en-us/article_attachments/15675587976477"
+        "https://support.catonetworks.com/hc/article_attachments/15675587976477"
     )
     pops = []
     csv_file = StringIO(colos.text)
