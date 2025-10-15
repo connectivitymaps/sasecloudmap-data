@@ -11,6 +11,7 @@ from utils.skeleton import geojson_skeleton
 def get_data():
     data = httpx.get("https://trust.netskope.com/ss/v1/datacenters")
     data = data.json()
+    data = [loc for loc in data if loc.get("is_dp") is True]
 
     locations = []
     seen = set()
