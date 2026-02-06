@@ -2,6 +2,7 @@
 import argparse
 import json
 import sys
+import time
 from urllib.parse import quote_plus
 
 import httpx
@@ -10,27 +11,36 @@ from utils.skeleton import geojson_skeleton
 
 
 def get_data():
-    """get cloudflare locations"""
-    colos = httpx.get(
+    """get iboss locations"""
+    resp = httpx.get(
         "https://status.iboss.com/ibcloud/web/public/cloudStatus/dataCenters"
     )
-    colos = colos.json()
+    resp.raise_for_status()
+    colos = resp.json()
 
     colos = [
         item["name"].replace(" POP", "") for region in colos.values() for item in region
     ]
     locations = []
     for colo in colos:
-        req = httpx.get(
-            f"https://nominatim.openstreetmap.org/search?q={quote_plus(colo)}&format=jsonv2&polygon=1&addressdetails=1&limit=1"
-        )
-        output = req.json()
-        locations.append(
-            {
-                "name": output[0]["name"],
-                "coordinates": [output[0]["lat"], output[0]["lon"]],
-            }
-        )
+        try:
+            req = httpx.get(
+                f"https://nominatim.openstreetmap.org/search?q={quote_plus(colo)}&format=jsonv2&polygon=1&addressdetails=1&limit=1"
+            )
+            req.raise_for_status()
+            output = req.json()
+            locations.append(
+                {
+                    "name": output[0]["name"],
+                    "coordinates": [output[0]["lat"], output[0]["lon"]],
+                }
+            )
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            print(f"HTTP error for location {colo}: {e}")
+        except (KeyError, IndexError, ValueError) as e:
+            print(f"Failed to parse location {colo}: {e}")
+        finally:
+            time.sleep(1)  # Nominatim rate limit: 1 request/second
 
     return locations
 

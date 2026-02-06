@@ -7,14 +7,14 @@ This repo contains the data for the individual provider's displayed on [saseclou
 1. copy `.env.example` to `.env` and edit `.env` file with the required environment variables
 
 ```shell
-# load python environment
-source .venv/bin/activate
-# refresh data
-for i in src/provider_data/*.py; do echo $i; $i --refresh; done
-# update dev environment
-for i in src/provider_data/*.py; do echo $i; $i --dev; done
-# update prod environment
-for i in src/provider_data/*.py; do echo $i; $i --prod; done
+# refresh and update all providers
+uv run provider_data/run_all.py --refresh --dev
+
+# or run individual provider
+uv run provider_data/cloudflare_geojson.py --refresh --dev
+
+# run tests
+uv run pytest tests/ -v
 ```
 
 ## help

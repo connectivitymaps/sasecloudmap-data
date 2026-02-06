@@ -3,6 +3,7 @@ import argparse
 import csv
 import json
 import sys
+import time
 from io import StringIO
 from urllib.parse import quote_plus
 
@@ -12,33 +13,39 @@ from utils.skeleton import geojson_skeleton
 
 
 def get_data():
-    colos = httpx.get(
+    resp = httpx.get(
         "https://support.catonetworks.com/hc/article_attachments/15675587976477"
     )
+    resp.raise_for_status()
     pops = []
-    csv_file = StringIO(colos.text)
+    csv_file = StringIO(resp.text)
     reader = csv.DictReader(csv_file, delimiter=",")
     for row in reader:
         pops.append(row["PoP\xa0Location"].strip())
 
     locations = []
 
-    for pop in list(set(pops)):
+    for pop in list(dict.fromkeys(pops)):
         try:
             req = httpx.get(
                 "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
                     quote_plus(pop)
                 )
             )
+            req.raise_for_status()
             data = req.json()
             locations.append(
                 {
-                    "name": data[0]["place_id"],
+                    "name": data[0]["name"],
                     "coordinates": [data[0]["lat"], data[0]["lon"]],
                 }
             )
-        except Exception:
-            pass
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            print(f"HTTP error for location {pop}: {e}")
+        except (KeyError, IndexError, ValueError) as e:
+            print(f"Failed to parse location {pop}: {e}")
+        finally:
+            time.sleep(1)  # Nominatim rate limit: 1 request/second
 
     return [i for n, i in enumerate(locations) if i not in locations[n + 1 :]]
 

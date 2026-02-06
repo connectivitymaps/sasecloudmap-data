@@ -1,0 +1,66 @@
+---
+name: update dev data (unified)
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 18 * * 1'
+
+jobs:
+  update-all-providers:
+    runs-on: ubuntu-latest
+    name: "Update all providers"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "prep env"
+        env:
+          DOTENV: ${{ secrets.DOTENV }}
+        run: |
+          echo -n $DOTENV | base64 -d > .env
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v6
+
+      - name: "Install the project"
+        run: uv sync --all-extras --dev
+
+      - name: "Install playwright"
+        run: |
+          mkdir -p output
+          uv run playwright install chromium
+
+      - name: "Update all providers"
+        run: |
+          uv run provider_data/run_all.py --refresh --dev
+
+      - name: "Run GeoJSON validation tests"
+        run: |
+          uv run pytest tests/test_geojson.py -v --tb=short
+        continue-on-error: true
+
+  generate-sitemap:
+    needs: update-all-providers
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "prep env"
+        env:
+          DOTENV: ${{ secrets.DOTENV }}
+        run: |
+          echo -n $DOTENV | base64 -d > .env
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v6
+
+      - name: "Install the project"
+        run: uv sync --all-extras --dev
+
+      - name: "Generate sitemap"
+        run: |
+          uv run provider_data/utils/generate_sitemap.py --dev

@@ -11,8 +11,9 @@ from utils.skeleton import geojson_skeleton
 
 def get_cloudflare_data():
     """get cloudflare locations"""
-    colos = httpx.get("https://speed.cloudflare.com/locations")
-    colos = colos.json()
+    resp = httpx.get("https://speed.cloudflare.com/locations", headers={"referer": "https://speed.cloudflare.com/"})
+    resp.raise_for_status()
+    colos = resp.json()
 
     locations = []
     for colo in colos:
@@ -25,17 +26,24 @@ def get_cloudflare_data():
 
 def get_jdcloud_data():
     """get cloudflare jd cloud specific locations"""
-    china_colos = httpx.get("https://api.cloudflare.com/client/v4/ips?networks=jdcloud")
-    data = china_colos.json()
+    resp = httpx.get("https://api.cloudflare.com/client/v4/ips?networks=jdcloud")
+    resp.raise_for_status()
+    data = resp.json()
     data = data["result"]["jdcloud_cidrs"]
 
     china_cidrs = [re.sub(r"/.*$", "", line) for line in data]
 
     locations = []
     for cidr in china_cidrs:
-        ip_geolocation = httpx.get("https://ipinfo.io/{}".format(cidr))
-        data = ip_geolocation.json()
-        locations.append({"name": data["city"], "coordinates": data["loc"].split(",")})
+        try:
+            ip_geolocation = httpx.get("https://ipinfo.io/{}".format(cidr))
+            ip_geolocation.raise_for_status()
+            geo_data = ip_geolocation.json()
+            locations.append({"name": geo_data["city"], "coordinates": geo_data["loc"].split(",")})
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            print(f"HTTP error for CIDR {cidr}: {e}")
+        except (KeyError, ValueError) as e:
+            print(f"Failed to parse CIDR {cidr}: {e}")
 
     return [i for n, i in enumerate(locations) if i not in locations[n + 1 :]]
 

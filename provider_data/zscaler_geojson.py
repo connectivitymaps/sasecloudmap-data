@@ -27,8 +27,9 @@ def convert_to_geojson(data):
 def get_data():
     """get data from zscaler"""
     locations = []
-    data = httpx.get("https://config.zscaler.com/api/zscaler.net/cenr/json")
-    data = data.json()
+    resp = httpx.get("https://config.zscaler.com/api/zscaler.net/cenr/json")
+    resp.raise_for_status()
+    data = resp.json()
 
     for continent in data["zscaler.net"]:
         for city, info in data["zscaler.net"][continent].items():

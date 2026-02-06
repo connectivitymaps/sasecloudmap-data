@@ -2,6 +2,7 @@
 import argparse
 import json
 import sys
+import time
 
 import httpx
 from bs4 import BeautifulSoup
@@ -17,11 +18,17 @@ def get_data():
     page.goto(
         "https://support.forcepoint.com/s/article/Cloud-service-data-center-IP-addresses-port-numbers"
     )
-    location = page.locator(
-        "css=#ServiceCommunityTemplate > div.cCenterPanel > div > div.slds-grid.slds-wrap.slds-medium-nowrap.slds-large-nowrap > div.slds-col--padded.slds-size--12-of-12.slds-medium-size--8-of-12.slds-large-size--8-of-12.comm-layout-column > div > div:nth-child(1) > c-hub_-knowledge-article-page > div:nth-child(7) > div > div.slds-form-element__control.slds-grid.itemBody > span > span > table:nth-child(7)"
-    )
-    location.scroll_into_view_if_needed()
-    html = location.inner_html()
+    page.wait_for_load_state("networkidle")
+    # Find the table containing COUNTRY and CITY columns
+    tables = page.locator("table").all()
+    html = None
+    for table in tables:
+        content = table.inner_html()
+        if "COUNTRY" in content and "CITY" in content:
+            html = content
+            break
+    if not html:
+        raise ValueError("Could not find data center locations table")
     browser.close()
     playwright.stop()
 
@@ -39,18 +46,23 @@ def get_data():
     locations = []
     for row in data:
         city, country = row[-1], row[0]
-        geolocation = httpx.get(
-            f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&q={city},{country}"
-        )
-        resp = geolocation.json()
         try:
+            geolocation = httpx.get(
+                f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&q={city},{country}"
+            )
+            geolocation.raise_for_status()
+            resp = geolocation.json()
             geometry = {
                 "name": city,
                 "coordinates": resp["features"][0]["geometry"]["coordinates"],
             }
             locations.append(geometry)
-        except Exception:
-            pass
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            print(f"HTTP error for location {city}, {country}: {e}")
+        except (KeyError, IndexError, ValueError) as e:
+            print(f"Failed to parse location {city}, {country}: {e}")
+        finally:
+            time.sleep(1)  # Nominatim rate limit: 1 request/second
 
     return locations
 

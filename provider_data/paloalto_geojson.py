@@ -2,20 +2,21 @@
 import argparse
 import json
 import sys
+import time
 from urllib.parse import quote_plus
 
 import httpx
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
 
 def get_data():
-    data = httpx.get(
-        "https://docs.paloaltonetworks.com/prisma/prisma-access/3-2/prisma-access-panorama-admin/prepare-the-prisma-access-infrastructure/list-of-prisma-access-locations/list-of-locations-by-compute-location"
+    resp = httpx.get(
+        "https://docs.paloaltonetworks.com/prisma-access/administration/prisma-access-overview/list-of-prisma-access-locations"
     )
-    data = data.text
+    resp.raise_for_status()
+    data = resp.text
     soup = BeautifulSoup(data, "html.parser")
     table = soup.select_one("#idf6de761e-2601-46d8-a61a-aaeb5e030069 > table")
 
@@ -24,25 +25,30 @@ def get_data():
         cities = row.find_all("td")[2].get_text(separator="\n", strip=True).split("\n")
         processed_location.extend(cities)
 
-    unique_locations = list(set(processed_location))
+    unique_locations = list(dict.fromkeys(processed_location))
     locations = []
 
     for loc in unique_locations:
-        req = httpx.get(
-            "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
-                quote_plus(loc)
-            )
-        )
-        data = req.json()
         try:
+            req = httpx.get(
+                "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
+                    quote_plus(loc)
+                )
+            )
+            req.raise_for_status()
+            data = req.json()
             locations.append(
                 {
-                    "name": data[0]["place_id"],
+                    "name": data[0]["name"],
                     "coordinates": [data[0]["lat"], data[0]["lon"]],
                 }
             )
-        except Exception as e:
-            print(e)
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            print(f"HTTP error for location {loc}: {e}")
+        except (KeyError, IndexError, ValueError) as e:
+            print(f"Failed to parse location {loc}: {e}")
+        finally:
+            time.sleep(1)  # Nominatim rate limit: 1 request/second
 
     return locations
 
@@ -63,7 +69,6 @@ def convert_to_geojson(data):
 
 
 if __name__ == "__main__":
-    load_dotenv()
     provider_name = "paloalto"
     friendly_name = "Prisma Access (PANW)"
     app_type = ["sase"]

@@ -2,6 +2,7 @@
 import argparse
 import json
 import sys
+import time
 from urllib.parse import quote_plus
 
 import httpx
@@ -11,10 +12,11 @@ from utils.skeleton import geojson_skeleton
 
 
 def get_data():
-    data = httpx.get(
+    resp = httpx.get(
         "https://sc1.checkpoint.com/documents/Infinity_Portal/WebAdminGuides/EN/SASE-Admin-Guide/Content/Topics-SASE-AG/Networks/Regions-PoP.htm"
     )
-    data = data.text
+    resp.raise_for_status()
+    data = resp.text
     soup = BeautifulSoup(data, "html.parser")
     table = soup.select_one(
         "#mc-main-content > table.TableStyle-TP_Table_Dark_Header_and_Pattern > tbody"
@@ -26,25 +28,30 @@ def get_data():
         text = text.strip()
         processed_location.append(text)
 
-    unique_locations = list(set(processed_location))
+    unique_locations = list(dict.fromkeys(processed_location))
     locations = []
 
     for loc in unique_locations:
-        req = httpx.get(
-            "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
-                quote_plus(loc)
-            )
-        )
-        data = req.json()
         try:
+            req = httpx.get(
+                "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
+                    quote_plus(loc)
+                )
+            )
+            req.raise_for_status()
+            data = req.json()
             locations.append(
                 {
-                    "name": data[0]["place_id"],
+                    "name": data[0]["name"],
                     "coordinates": [data[0]["lat"], data[0]["lon"]],
                 }
             )
-        except Exception:
-            print(loc)
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            print(f"HTTP error for location {loc}: {e}")
+        except (KeyError, IndexError, ValueError) as e:
+            print(f"Failed to parse location {loc}: {e}")
+        finally:
+            time.sleep(1)  # Nominatim rate limit: 1 request/second
 
     return locations
 

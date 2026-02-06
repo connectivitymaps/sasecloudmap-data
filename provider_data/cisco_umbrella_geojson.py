@@ -2,6 +2,7 @@
 import argparse
 import json
 import sys
+import time
 from urllib.parse import quote_plus
 
 import httpx
@@ -12,10 +13,11 @@ from utils.skeleton import geojson_skeleton
 
 def get_data():
     """get data from cisco"""
-    data = httpx.get(
+    resp = httpx.get(
         "https://umbrella.cisco.com/why-umbrella/global-network-and-traffic"
     )
-    data = data.text
+    resp.raise_for_status()
+    data = resp.text
     soup = BeautifulSoup(data, "html.parser")
     table = soup.select("#networks")
     rows = table[0].find_all("tr")
@@ -27,18 +29,26 @@ def get_data():
         try:
             location = [ele.text.strip() for ele in location]
             for loc in location:
-                req = httpx.get(
-                    "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
-                        quote_plus(loc)
+                try:
+                    req = httpx.get(
+                        "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
+                            quote_plus(loc)
+                        )
                     )
-                )
-                data = req.json()
-                locations.append(
-                    {
-                        "name": data[0]["name"],
-                        "coordinates": [data[0]["lat"], data[0]["lon"]],
-                    }
-                )
+                    req.raise_for_status()
+                    data = req.json()
+                    locations.append(
+                        {
+                            "name": data[0]["name"],
+                            "coordinates": [data[0]["lat"], data[0]["lon"]],
+                        }
+                    )
+                except (httpx.HTTPStatusError, httpx.RequestError) as e:
+                    print(f"HTTP error for location {loc}: {e}")
+                except (KeyError, IndexError, ValueError) as e:
+                    print(f"Failed to parse location {loc}: {e}")
+                finally:
+                    time.sleep(1)  # Nominatim rate limit: 1 request/second
         except TypeError:
             pass
     return locations

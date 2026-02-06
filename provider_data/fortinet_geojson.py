@@ -3,6 +3,7 @@ import argparse
 import json
 import re
 import sys
+import time
 
 import httpx
 from bs4 import BeautifulSoup
@@ -50,6 +51,7 @@ def resolve_locations(airport_codes):
                 fallback_geolocation = httpx.get(
                     f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&q={code}+airport"
                 )
+                fallback_geolocation.raise_for_status()
                 fallback_resp = fallback_geolocation.json()
                 if fallback_resp.get("features"):
                     geometry = {
@@ -58,12 +60,12 @@ def resolve_locations(airport_codes):
                             "coordinates"
                         ],
                     }
-                else:
-                    pass
-            except (KeyError, ValueError, httpx.RequestError) as e:
-                print(
-                    f"could not find coordinates for airport code: {code}, error: {e}"
-                )
+            except (httpx.HTTPStatusError, httpx.RequestError) as e:
+                print(f"HTTP error for airport code {code}: {e}")
+            except (KeyError, ValueError, IndexError) as e:
+                print(f"Failed to parse airport code {code}: {e}")
+            finally:
+                time.sleep(1)  # Nominatim rate limit: 1 request/second
 
         if geometry:
             data.append(geometry)
@@ -72,10 +74,11 @@ def resolve_locations(airport_codes):
 
 
 def get_data():
-    colos = httpx.get(
+    resp = httpx.get(
         "https://docs.fortinet.com/document/fortisase/latest/reference-guide/663044/global-data-centers"
     )
-    soup = BeautifulSoup(colos.text, "html.parser")
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
     content = soup.find(id="mc-main-content")
     locations = content.select(
         "td.TableStyle-FortinetTable-BodyE-Column2-Body1, td.TableStyle-FortinetTable-BodyE-Column2-Body2"
