@@ -42,6 +42,11 @@ jobs:
           uv run pytest tests/test_geojson.py -v --tb=short
         continue-on-error: true
 
+      - name: "Upload snapshots to R2"
+        run: |
+          uv run provider_data/utils/upload_to_r2.py
+        continue-on-error: true
+
   generate-sitemap:
     needs: update-all-providers
     runs-on: ubuntu-latest

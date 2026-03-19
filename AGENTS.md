@@ -23,7 +23,8 @@ provider-data/
 │   └── utils/
 │       ├── post_data.py     # API posting helper
 │       ├── skeleton.py      # GeoJSON skeleton generator
-│       └── generate_sitemap.py  # Sitemap generation utility
+│       ├── generate_sitemap.py  # Sitemap generation utility
+│       └── upload_to_r2.py  # R2 historical snapshot uploader
 ├── tests/                   # GeoJSON validation tests
 ├── output/                  # Generated JSON files (gitignored)
 ├── .github/workflows/       # CI: auto-update dev/prod on schedule
@@ -77,6 +78,10 @@ Required in `.env`:
 - `PROD_HOSTNAME` - Prod API endpoint
 - `CLOUDFLARE_ZONE_ID` - For cache purging
 - `CACHE_PURGE_KEY` - Cloudflare API token for cache operations
+- `R2_ACCOUNT_ID` - Cloudflare account ID (for R2 snapshots)
+- `R2_ACCESS_KEY_ID` - R2 API token access key ID
+- `R2_SECRET_ACCESS_KEY` - R2 API token secret access key
+- `R2_BUCKET_NAME` - R2 bucket name for historical snapshots
 
 ## Current Providers
 
@@ -129,6 +134,7 @@ Required in `.env`:
 - Uses `run_all.py` for batch updates with graceful failure handling
 - Runs GeoJSON validation tests after updates
 - Generates sitemap and purges Cloudflare cache
+- Uploads historical GeoJSON snapshots to Cloudflare R2 (timestamp-prefixed)
 
 ## Common Geocoding Services Used
 

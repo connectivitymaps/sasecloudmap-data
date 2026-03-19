@@ -4,24 +4,9 @@ import json
 import sys
 
 import httpx
+from utils.base import convert_to_geojson
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
-
-
-def convert_to_geojson(data):
-    """convert passed data to proper geojson"""
-    features = []
-
-    for city in data:
-        latitude, longitude = map(float, city["coordinates"])
-        feature = {
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [longitude, latitude]},
-            "properties": {"city": city["name"]},
-        }
-        features.append(feature)
-
-    return features
 
 
 def get_data():
