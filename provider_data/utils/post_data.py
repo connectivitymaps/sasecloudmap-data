@@ -6,6 +6,9 @@ import httpx
 from dotenv import load_dotenv
 
 
+REQUEST_TIMEOUT = 30.0
+
+
 def write_and_post(
     provider_name,
     friendly_name,
@@ -30,6 +33,7 @@ def write_and_post(
                 f"{os.environ['DEV_HOSTNAME']}{provider_name}",
                 headers=headers,
                 json=payload,
+                timeout=REQUEST_TIMEOUT,
             )
             print(f"dev update: {dev.text}")
     if update_prod:
@@ -39,11 +43,13 @@ def write_and_post(
         dev = httpx.get(
             f"{base_url}/api/{provider_name}",
             headers={"bms": os.environ["BMS"]},
+            timeout=REQUEST_TIMEOUT,
         )
         payload["data"] = dev.json()
         prod = httpx.post(
             f"{os.environ['PROD_HOSTNAME']}{provider_name}",
             headers=headers,
             json=payload,
+            timeout=REQUEST_TIMEOUT,
         )
         print(f"prod update: {prod.text}")

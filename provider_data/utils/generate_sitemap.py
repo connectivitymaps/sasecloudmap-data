@@ -5,10 +5,9 @@ from urllib.parse import urlparse
 import httpx
 from dotenv import load_dotenv
 
-load_dotenv()
-
 
 def main():
+    load_dotenv()
     parser = argparse.ArgumentParser(
         description="Generate sitemap for specified environment"
     )
