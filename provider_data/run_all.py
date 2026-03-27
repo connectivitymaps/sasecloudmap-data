@@ -122,8 +122,10 @@ def main():
 
     results = {"success": [], "failed": []}
 
-    # Run providers in parallel (max 5 concurrent to be respectful)
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    # When refreshing, run sequentially to respect Nominatim's 1 req/sec rate limit.
+    # Multiple scripts hitting Nominatim in parallel causes rate limiting and empty results.
+    max_workers = 1 if args.refresh else 5
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(
                 run_provider, script_path, args.refresh, args.dev, args.prod
