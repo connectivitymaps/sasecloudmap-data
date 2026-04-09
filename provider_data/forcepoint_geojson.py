@@ -48,7 +48,7 @@ def get_data():
         city, country = row[-1], row[0]
         try:
             geolocation = httpx.get(
-                f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&q={city},{country}"
+                f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&accept-language=en&q={city},{country}"
             )
             geolocation.raise_for_status()
             resp = geolocation.json()

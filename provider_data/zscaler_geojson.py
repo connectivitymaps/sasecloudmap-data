@@ -20,7 +20,7 @@ def get_data():
         for city, info in data["zscaler.net"][continent].items():
             locations.append(
                 {
-                    "name": city,
+                    "name": city.removeprefix("city : "),
                     "coordinates": [info[0]["latitude"], info[0]["longitude"]],
                 }
             )

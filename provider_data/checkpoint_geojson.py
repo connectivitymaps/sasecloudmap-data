@@ -35,7 +35,7 @@ def get_data():
     for loc in unique_locations:
         try:
             req = httpx.get(
-                "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1".format(
+                "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1&accept-language=en".format(
                     quote_plus(loc)
                 )
             )

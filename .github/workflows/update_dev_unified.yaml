@@ -33,19 +33,25 @@ jobs:
           mkdir -p output
           uv run playwright install chromium
 
-      - name: "Update all providers"
+      - name: "Refresh all provider output"
         run: |
-          uv run provider_data/run_all.py --refresh --dev
+          uv run provider_data/run_all.py --refresh
 
       - name: "Run GeoJSON validation tests"
         run: |
           uv run pytest tests/test_geojson.py -v --tb=short
-        continue-on-error: true
+
+      - name: "Compare with previous R2 snapshot"
+        run: |
+          uv run provider_data/utils/validate_snapshot.py
+
+      - name: "Deploy refreshed output to dev"
+        run: |
+          uv run provider_data/run_all.py --dev --fail-fast
 
       - name: "Upload snapshots to R2"
         run: |
           uv run provider_data/utils/upload_to_r2.py
-        continue-on-error: true
 
   generate-sitemap:
     needs: update-all-providers

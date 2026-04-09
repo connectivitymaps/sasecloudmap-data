@@ -19,6 +19,8 @@ from pathlib import Path
 import boto3
 from dotenv import load_dotenv
 
+LATEST_POINTER_KEY = "latest.txt"
+
 
 def get_s3_client():
     """Create an S3 client configured for Cloudflare R2."""
@@ -45,7 +47,7 @@ def upload_snapshots(output_dir: Path, timestamp: str | None = None):
         print("No JSON files found in output/")
         return
 
-    print(f"Uploading {len(json_files)} files to r2://{bucket}/{timestamp}/")
+    print(f"Uploading {len(json_files)} files to R2 with prefix {timestamp}/")
 
     for json_file in json_files:
         key = f"{timestamp}/{json_file.name}"
@@ -57,6 +59,13 @@ def upload_snapshots(output_dir: Path, timestamp: str | None = None):
         )
         print(f"  {key} ({json_file.stat().st_size:,} bytes)")
 
+    client.put_object(
+        Bucket=bucket,
+        Key=LATEST_POINTER_KEY,
+        Body=timestamp.encode("utf-8"),
+        ContentType="text/plain; charset=utf-8",
+    )
+    print(f"Updated R2 snapshot pointer: {LATEST_POINTER_KEY} -> {timestamp}")
     print(f"Snapshot uploaded: {timestamp}/")
 
 

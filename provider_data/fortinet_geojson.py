@@ -37,7 +37,7 @@ def resolve_locations(airport_codes):
             resp = geolocation.json()
             if resp.get("success"):
                 geometry = {
-                    "name": resp["name"],
+                    "name": code,
                     "coordinates": [resp["lon"], resp["lat"]],
                 }
             else:
@@ -49,13 +49,13 @@ def resolve_locations(airport_codes):
         if geometry is None:
             try:
                 fallback_geolocation = httpx.get(
-                    f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&q={code}+airport"
+                    f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&accept-language=en&q={code}+airport"
                 )
                 fallback_geolocation.raise_for_status()
                 fallback_resp = fallback_geolocation.json()
                 if fallback_resp.get("features"):
                     geometry = {
-                        "name": f"{code} Airport",
+                        "name": code,
                         "coordinates": fallback_resp["features"][0]["geometry"][
                             "coordinates"
                         ],

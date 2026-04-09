@@ -10,3 +10,7 @@ Remaining code quality improvements that still need follow-up.
   dev = httpx.get(...)  # This is actually fetching from dev to push to prod
   prod = httpx.post(...)
   ```
+
+## Output size optimization
+
+- **Compact array format**: Replace full GeoJSON feature objects with compact `[lon, lat, "city"]` arrays in the output. Reconstruct GeoJSON on the consumer side. This would reduce output size by ~70-80% (273 KB → ~70 KB across all providers) since the repeated `{"type":"Feature","geometry":{"type":"Point","coordinates":[...]},"properties":{"city":"..."}}` boilerplate accounts for ~80% of each file. Requires a corresponding change in the frontend/API consumer to unpack the arrays back into GeoJSON.

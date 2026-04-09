@@ -12,7 +12,10 @@ def convert_to_geojson(data: list[dict]) -> list[dict]:
         latitude, longitude = map(float, city["coordinates"])
         feature = {
             "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [longitude, latitude]},
+            "geometry": {
+                "type": "Point",
+                "coordinates": [round(longitude, 4), round(latitude, 4)],
+            },
             "properties": {"city": city["name"]},
         }
         features.append(feature)

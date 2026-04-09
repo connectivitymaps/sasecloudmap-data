@@ -26,7 +26,7 @@ def get_data():
     for colo in colos:
         try:
             req = httpx.get(
-                f"https://nominatim.openstreetmap.org/search?q={quote_plus(colo)}&format=jsonv2&polygon=1&addressdetails=1&limit=1"
+                f"https://nominatim.openstreetmap.org/search?q={quote_plus(colo)}&format=jsonv2&polygon=1&addressdetails=1&limit=1&accept-language=en"
             )
             req.raise_for_status()
             output = req.json()
