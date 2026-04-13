@@ -9,29 +9,40 @@ from urllib.parse import quote_plus
 
 import httpx
 from utils.base import convert_to_geojson
+from utils.http import http_request_kwargs
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
 
+def extract_location_queries(csv_text: str) -> list[str]:
+    csv_file = StringIO(csv_text)
+    reader = csv.DictReader(csv_file, delimiter=",")
+    queries = []
+    for row in reader:
+        query = (
+            row.get("Serviced Through (for Geo Location)", "").strip()
+            or row["PoP\xa0Location"].strip()
+        )
+        if query:
+            queries.append(query)
+    return list(dict.fromkeys(queries))
+
+
 def get_data():
     resp = httpx.get(
-        "https://support.catonetworks.com/hc/article_attachments/15675587976477"
+        "https://support.catonetworks.com/hc/article_attachments/15675587976477",
+        **http_request_kwargs(),
     )
     resp.raise_for_status()
-    pops = []
-    csv_file = StringIO(resp.text)
-    reader = csv.DictReader(csv_file, delimiter=",")
-    for row in reader:
-        pops.append(row["PoP\xa0Location"].strip())
-
     locations = []
 
-    for pop in list(dict.fromkeys(pops)):
+    for pop in extract_location_queries(resp.text):
         try:
             req = httpx.get(
                 "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1&accept-language=en".format(
                     quote_plus(pop)
-                )
+                ),
+                **http_request_kwargs(),
             )
             req.raise_for_status()
             data = req.json()

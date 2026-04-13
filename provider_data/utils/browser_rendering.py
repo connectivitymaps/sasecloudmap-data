@@ -5,6 +5,8 @@ import os
 import httpx
 from dotenv import load_dotenv
 
+from provider_data.utils.http import http_request_kwargs
+
 DEFAULT_TIMEOUT = 60.0
 DEFAULT_MODEL = "workers-ai/@cf/moonshotai/kimi-k2.5"
 
@@ -87,6 +89,7 @@ def _post_quick_action(endpoint: str, payload: dict, *, timeout: float):
         },
         json=payload,
         timeout=timeout,
+        **http_request_kwargs(),
     )
     response.raise_for_status()
     body = response.json()

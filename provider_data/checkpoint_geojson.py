@@ -1,6 +1,7 @@
 #!/usr/bin/env -S uv run
 import argparse
 import json
+import re
 import sys
 import time
 from urllib.parse import quote_plus
@@ -8,36 +9,44 @@ from urllib.parse import quote_plus
 import httpx
 from bs4 import BeautifulSoup
 from utils.base import convert_to_geojson
+from utils.http import http_request_kwargs
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
 
+def normalize_location_text(text: str) -> str:
+    return re.sub(r"\s*\(\d+\)\s*$", "", text).strip()
+
+
+def extract_checkpoint_locations(html: str) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    table = soup.select_one("#mc-main-content table") or soup.select_one("table")
+    if table is None:
+        raise ValueError("Could not find Check Point locations table")
+
+    processed_locations = []
+    for item in table.find_all("li"):
+        location = normalize_location_text(item.get_text(" ", strip=True))
+        if location:
+            processed_locations.append(location)
+    return list(dict.fromkeys(processed_locations))
+
+
 def get_data():
     resp = httpx.get(
-        "https://sc1.checkpoint.com/documents/Infinity_Portal/WebAdminGuides/EN/SASE-Admin-Guide/Content/Topics-SASE-AG/Networks/Regions-PoP.htm"
+        "https://sc1.checkpoint.com/documents/Infinity_Portal/WebAdminGuides/EN/SASE-Admin-Guide/Content/Topics-SASE-AG/Networks/Regions-PoP.htm",
+        **http_request_kwargs(),
     )
     resp.raise_for_status()
-    data = resp.text
-    soup = BeautifulSoup(data, "html.parser")
-    table = soup.select_one(
-        "#mc-main-content > table.TableStyle-TP_Table_Dark_Header_and_Pattern > tbody"
-    )
-
-    processed_location = []
-    for ele in table.find_all("li"):
-        text = "".join([i for i in ele.text if not i.isdigit()])
-        text = text.strip()
-        processed_location.append(text)
-
-    unique_locations = list(dict.fromkeys(processed_location))
     locations = []
 
-    for loc in unique_locations:
+    for loc in extract_checkpoint_locations(resp.text):
         try:
             req = httpx.get(
                 "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1&accept-language=en".format(
                     quote_plus(loc)
-                )
+                ),
+                **http_request_kwargs(),
             )
             req.raise_for_status()
             data = req.json()

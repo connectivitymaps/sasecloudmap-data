@@ -7,6 +7,7 @@ import time
 
 import httpx
 from bs4 import BeautifulSoup
+from utils.http import http_request_kwargs
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
@@ -30,14 +31,18 @@ def convert_to_geojson(data):
 def resolve_locations(airport_codes):
     """resolve airport codes to geolocation"""
     data = []
-    for code in airport_codes:
+    for row in airport_codes:
+        code = row["airport_code"]
         geometry = None
         try:
-            geolocation = httpx.get(f"https://iata.clumsy.dev/?q={code.lower()}")
+            geolocation = httpx.get(
+                f"https://iata.clumsy.dev/?q={code.lower()}",
+                **http_request_kwargs(),
+            )
             resp = geolocation.json()
             if resp.get("success"):
                 geometry = {
-                    "name": code,
+                    "name": row["name"],
                     "coordinates": [resp["lon"], resp["lat"]],
                 }
             else:
@@ -49,13 +54,14 @@ def resolve_locations(airport_codes):
         if geometry is None:
             try:
                 fallback_geolocation = httpx.get(
-                    f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&accept-language=en&q={code}+airport"
+                    f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&accept-language=en&q={code}+airport",
+                    **http_request_kwargs(),
                 )
                 fallback_geolocation.raise_for_status()
                 fallback_resp = fallback_geolocation.json()
                 if fallback_resp.get("features"):
                     geometry = {
-                        "name": code,
+                        "name": row["name"],
                         "coordinates": fallback_resp["features"][0]["geometry"][
                             "coordinates"
                         ],
@@ -73,28 +79,41 @@ def resolve_locations(airport_codes):
     return [x for x in data if x]
 
 
-def get_data():
-    resp = httpx.get(
-        "https://docs.fortinet.com/document/fortisase/latest/reference-guide/663044/global-data-centers"
-    )
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
+def normalize_location_text(location_text: str) -> str:
+    match = re.search(r".*\([A-Z]{3}-[A-Z0-9]+\)", location_text)
+    if match:
+        return match.group(0).strip()
+    return location_text.strip()
+
+
+def extract_location_rows(html: str) -> list[dict[str, str]]:
+    soup = BeautifulSoup(html, "html.parser")
     content = soup.find(id="mc-main-content")
+    if content is None:
+        raise ValueError("Could not find Fortinet content container")
+
     locations = content.select(
         "td.TableStyle-FortinetTable-BodyE-Column2-Body1, td.TableStyle-FortinetTable-BodyE-Column2-Body2"
     )
 
-    airport_codes = []
+    rows = []
     for loc in locations:
-        location_text = loc.get_text(strip=True)
-        if location_text and (" - " in location_text or "(" in location_text):
-            match = re.search(r"\(([A-Z]{3})-", location_text)
-            if match:
-                airport_code = match.group(1)
-                airport_codes.append(airport_code)
+        location_text = normalize_location_text(loc.get_text(" ", strip=True))
+        if not location_text:
+            continue
+        match = re.search(r"\(([A-Z]{3})-[A-Z0-9]+\)", location_text)
+        if match:
+            rows.append({"name": location_text, "airport_code": match.group(1)})
+    return rows
 
-    unique_codes = list(dict.fromkeys(airport_codes))
-    return unique_codes
+
+def get_data():
+    resp = httpx.get(
+        "https://docs.fortinet.com/document/fortisase/latest/reference-guide/663044/global-data-centers",
+        **http_request_kwargs(),
+    )
+    resp.raise_for_status()
+    return extract_location_rows(resp.text)
 
 
 if __name__ == "__main__":

@@ -8,33 +8,60 @@ from urllib.parse import quote_plus
 import httpx
 from bs4 import BeautifulSoup
 from utils.base import convert_to_geojson
+from utils.http import http_request_kwargs
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
 
+def find_locations_table(soup: BeautifulSoup):
+    expected_headers = [
+        "compute location",
+        "prisma access location",
+        "city and country",
+    ]
+    for table in soup.find_all("table"):
+        headers = [
+            header.get_text(" ", strip=True).lower() for header in table.find_all("th")
+        ]
+        if all(header in headers for header in expected_headers):
+            return table
+    return None
+
+
+def extract_paloalto_locations(html: str) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    table = find_locations_table(soup)
+    if table is None:
+        raise ValueError("Could not find Palo Alto locations table")
+
+    processed_locations = []
+    rows = (
+        table.tbody.find_all("tr") if table.tbody is not None else table.find_all("tr")
+    )
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) < 3:
+            continue
+        cities = cells[2].get_text(separator="\n", strip=True).split("\n")
+        processed_locations.extend(city for city in cities if city)
+    return list(dict.fromkeys(processed_locations))
+
+
 def get_data():
     resp = httpx.get(
-        "https://docs.paloaltonetworks.com/prisma-access/administration/prisma-access-overview/list-of-prisma-access-locations"
+        "https://docs.paloaltonetworks.com/prisma-access/administration/prisma-access-overview/list-of-prisma-access-locations",
+        **http_request_kwargs(),
     )
     resp.raise_for_status()
-    data = resp.text
-    soup = BeautifulSoup(data, "html.parser")
-    table = soup.select_one("#idf6de761e-2601-46d8-a61a-aaeb5e030069 > table")
-
-    processed_location = []
-    for row in table.tbody.find_all("tr"):
-        cities = row.find_all("td")[2].get_text(separator="\n", strip=True).split("\n")
-        processed_location.extend(cities)
-
-    unique_locations = list(dict.fromkeys(processed_location))
     locations = []
 
-    for loc in unique_locations:
+    for loc in extract_paloalto_locations(resp.text):
         try:
             req = httpx.get(
                 "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1&accept-language=en".format(
                     quote_plus(loc)
-                )
+                ),
+                **http_request_kwargs(),
             )
             req.raise_for_status()
             data = req.json()

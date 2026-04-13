@@ -181,6 +181,61 @@ def test_forcepoint_markdown_parser_extracts_country_and_city_rows():
     ]
 
 
+def test_forcepoint_markdown_extraction_retries_when_first_attempt_is_shell(
+    monkeypatch,
+):
+    from provider_data import forcepoint_geojson
+
+    responses = iter(
+        [
+            "Forcepoint Hub\nLoading\nCSS Error",
+            """
+| COUNTRY | CITY |
+| --- | --- |
+| Germany | Berlin |
+""",
+        ]
+    )
+    calls = []
+
+    def fake_extract_markdown(**kwargs):
+        calls.append(kwargs)
+        return next(responses)
+
+    monkeypatch.setattr(forcepoint_geojson, "extract_markdown", fake_extract_markdown)
+
+    rows = forcepoint_geojson.extract_forcepoint_rows_via_markdown()
+
+    assert rows == [{"country": "Germany", "city": "Berlin"}]
+    assert len(calls) == 2
+    assert calls[1]["wait_for_selector"] == {"selector": "table", "visible": True}
+
+
+def test_forcepoint_markdown_extraction_retries_when_first_attempt_raises(
+    monkeypatch,
+):
+    from provider_data import forcepoint_geojson
+
+    calls = []
+
+    def fake_extract_markdown(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise RuntimeError("timed out")
+        return """
+| COUNTRY | CITY |
+| --- | --- |
+| France | Paris |
+"""
+
+    monkeypatch.setattr(forcepoint_geojson, "extract_markdown", fake_extract_markdown)
+
+    rows = forcepoint_geojson.extract_forcepoint_rows_via_markdown()
+
+    assert rows == [{"country": "France", "city": "Paris"}]
+    assert len(calls) == 2
+
+
 def test_forcepoint_get_data_converts_nominatim_coordinates_to_lat_lon(monkeypatch):
     from provider_data import forcepoint_geojson
 

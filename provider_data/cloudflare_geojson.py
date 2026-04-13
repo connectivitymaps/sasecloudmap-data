@@ -6,6 +6,7 @@ import sys
 
 import httpx
 from utils.base import convert_to_geojson
+from utils.http import http_request_kwargs
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
@@ -15,6 +16,7 @@ def get_cloudflare_data():
     resp = httpx.get(
         "https://speed.cloudflare.com/locations",
         headers={"referer": "https://speed.cloudflare.com/"},
+        **http_request_kwargs(),
     )
     resp.raise_for_status()
     colos = resp.json()
@@ -30,7 +32,10 @@ def get_cloudflare_data():
 
 def get_jdcloud_data():
     """get cloudflare jd cloud specific locations"""
-    resp = httpx.get("https://api.cloudflare.com/client/v4/ips?networks=jdcloud")
+    resp = httpx.get(
+        "https://api.cloudflare.com/client/v4/ips?networks=jdcloud",
+        **http_request_kwargs(),
+    )
     resp.raise_for_status()
     data = resp.json()
     data = data["result"]["jdcloud_cidrs"]
@@ -40,7 +45,10 @@ def get_jdcloud_data():
     locations = []
     for cidr in china_cidrs:
         try:
-            ip_geolocation = httpx.get("https://ipinfo.io/{}".format(cidr))
+            ip_geolocation = httpx.get(
+                "https://ipinfo.io/{}".format(cidr),
+                **http_request_kwargs(),
+            )
             ip_geolocation.raise_for_status()
             geo_data = ip_geolocation.json()
             locations.append(

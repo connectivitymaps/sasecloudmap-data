@@ -8,6 +8,7 @@ import time
 import httpx
 from provider_data.utils.base import convert_to_geojson as base_convert_to_geojson
 from provider_data.utils.browser_rendering import extract_json, extract_markdown
+from provider_data.utils.http import http_request_kwargs
 from provider_data.utils.post_data import write_and_post
 from provider_data.utils.skeleton import geojson_skeleton
 
@@ -61,6 +62,7 @@ def extract_forcepoint_rows_via_json():
             },
         },
         goto_options={"waitUntil": "load", "timeout": 45000},
+        wait_for_selector={"selector": "table", "visible": True},
         wait_for_timeout=5000,
         best_attempt=True,
     )
@@ -68,16 +70,36 @@ def extract_forcepoint_rows_via_json():
 
 
 def extract_forcepoint_rows_via_markdown():
-    markdown = extract_markdown(
-        url=FORCEPOINT_URL,
-        goto_options={"waitUntil": "load", "timeout": 45000},
-        wait_for_timeout=5000,
-        best_attempt=True,
-    )
-    rows = parse_forcepoint_markdown_table(markdown)
-    if not rows:
-        raise ValueError("Could not find Forcepoint data center locations table")
-    return rows
+    errors = []
+    attempts = [
+        {
+            "goto_options": {"waitUntil": "load", "timeout": 45000},
+            "wait_for_timeout": 5000,
+            "best_attempt": True,
+        },
+        {
+            "goto_options": {"waitUntil": "networkidle", "timeout": 60000},
+            "wait_for_selector": {"selector": "table", "visible": True},
+            "wait_for_timeout": 10000,
+            "best_attempt": True,
+        },
+    ]
+
+    for attempt in attempts:
+        try:
+            markdown = extract_markdown(url=FORCEPOINT_URL, **attempt)
+            rows = parse_forcepoint_markdown_table(markdown)
+            if rows:
+                return rows
+        except Exception as exc:
+            errors.append(str(exc))
+
+    if errors:
+        raise ValueError(
+            "Could not find Forcepoint data center locations table: "
+            + "; ".join(errors)
+        )
+    raise ValueError("Could not find Forcepoint data center locations table")
 
 
 def parse_forcepoint_markdown_table(markdown: str) -> list[dict[str, str]]:
@@ -160,7 +182,8 @@ def get_data():
         country = row["country"]
         try:
             geolocation = httpx.get(
-                f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&accept-language=en&q={city},{country}"
+                f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&accept-language=en&q={city},{country}",
+                **http_request_kwargs(),
             )
             geolocation.raise_for_status()
             resp = geolocation.json()

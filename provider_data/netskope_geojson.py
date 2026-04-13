@@ -5,12 +5,16 @@ import sys
 
 import httpx
 from utils.base import convert_to_geojson
+from utils.http import http_request_kwargs
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
 
 def get_data():
-    resp = httpx.get("https://trust.netskope.com/ss/v1/datacenters")
+    resp = httpx.get(
+        "https://trust.netskope.com/ss/v1/datacenters",
+        **http_request_kwargs(),
+    )
     resp.raise_for_status()
     data = resp.json()
     data = [loc for loc in data if loc.get("is_dp") is True]

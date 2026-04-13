@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 import httpx
 from dotenv import load_dotenv
 
+from provider_data.utils.http import http_request_kwargs
+
 
 REQUEST_TIMEOUT = 30.0
 
@@ -34,6 +36,7 @@ def write_and_post(
                 headers=headers,
                 json=payload,
                 timeout=REQUEST_TIMEOUT,
+                **http_request_kwargs(),
             )
             print(f"dev update: {dev.text}")
     if update_prod:
@@ -44,6 +47,7 @@ def write_and_post(
             f"{base_url}/api/{provider_name}",
             headers={"bms": os.environ["BMS"]},
             timeout=REQUEST_TIMEOUT,
+            **http_request_kwargs(),
         )
         payload["data"] = dev.json()
         prod = httpx.post(
@@ -51,5 +55,6 @@ def write_and_post(
             headers=headers,
             json=payload,
             timeout=REQUEST_TIMEOUT,
+            **http_request_kwargs(),
         )
         print(f"prod update: {prod.text}")

@@ -1,32 +1,42 @@
 #!/usr/bin/env -S uv run
 import argparse
 import json
+import re
 import sys
 import time
 from urllib.parse import quote_plus
 
 import httpx
 from utils.base import convert_to_geojson
+from utils.http import http_request_kwargs
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
+
+
+def normalize_pop_location(name: str) -> str:
+    return re.sub(r"\s+POP(?:\s+\d+)?$", "", name).strip()
 
 
 def get_data():
     """get iboss locations"""
     resp = httpx.get(
-        "https://status.iboss.com/ibcloud/web/public/cloudStatus/dataCenters"
+        "https://status.iboss.com/ibcloud/web/public/cloudStatus/dataCenters",
+        **http_request_kwargs(),
     )
     resp.raise_for_status()
     colos = resp.json()
 
     colos = [
-        item["name"].replace(" POP", "") for region in colos.values() for item in region
+        normalize_pop_location(item["name"])
+        for region in colos.values()
+        for item in region
     ]
     locations = []
     for colo in colos:
         try:
             req = httpx.get(
-                f"https://nominatim.openstreetmap.org/search?q={quote_plus(colo)}&format=jsonv2&polygon=1&addressdetails=1&limit=1&accept-language=en"
+                f"https://nominatim.openstreetmap.org/search?q={quote_plus(colo)}&format=jsonv2&polygon=1&addressdetails=1&limit=1&accept-language=en",
+                **http_request_kwargs(),
             )
             req.raise_for_status()
             output = req.json()

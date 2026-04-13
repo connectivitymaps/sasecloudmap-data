@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 import httpx
 from dotenv import load_dotenv
 
+from provider_data.utils.http import http_request_kwargs
+
 
 def main():
     load_dotenv()
@@ -35,6 +37,7 @@ def main():
     resp = httpx.get(
         f"{base_url}/sitemap",
         headers=headers,
+        **http_request_kwargs(),
     )
     print(f"updating {base_url}: {resp.text}")
 
@@ -51,6 +54,7 @@ def main():
         f"https://api.cloudflare.com/client/v4/zones/{zone_id}/purge_cache",
         headers=cache_headers,
         json=cache_data,
+        **http_request_kwargs(),
     )
     print(f"clearing cache for {cache_host}: {cache_resp.text}")
 
