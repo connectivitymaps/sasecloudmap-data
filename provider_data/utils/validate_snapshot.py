@@ -14,6 +14,7 @@ Required environment variables:
 """
 
 import argparse
+import ast
 import json
 import os
 import sys
@@ -80,7 +81,70 @@ def count_features(geojson: dict) -> int:
     return len(geojson.get("features", []))
 
 
-def validate(output_dir: Path, threshold: float) -> list[dict]:
+def _extract_string_constant(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def extract_provider_name(script_path: Path) -> str | None:
+    """Extract a provider's output filename stem from its script."""
+    try:
+        tree = ast.parse(script_path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return None
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            value = _extract_string_constant(node.value)
+            if value is None:
+                continue
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "provider_name":
+                    return value
+        elif isinstance(node, ast.AnnAssign):
+            value = _extract_string_constant(node.value)
+            if (
+                value is not None
+                and isinstance(node.target, ast.Name)
+                and node.target.id == "provider_name"
+            ):
+                return value
+    return None
+
+
+def discover_expected_files(provider_dir: Path | None = None) -> set[str]:
+    """Discover the output JSON files expected from the current provider scripts."""
+    if provider_dir is None:
+        provider_dir = Path(__file__).resolve().parent.parent
+
+    expected_files = set()
+    geojson_scripts = sorted(provider_dir.glob("*_geojson.py"))
+    other_scripts = sorted(
+        script
+        for script in provider_dir.glob("*.py")
+        if script.name not in {"run_all.py", "__init__.py"}
+        and not script.name.startswith("_")
+        and script not in geojson_scripts
+    )
+
+    for script_path in [*geojson_scripts, *other_scripts]:
+        provider_name = extract_provider_name(script_path)
+        if provider_name:
+            expected_files.add(f"{provider_name}.json")
+
+    return expected_files
+
+
+def find_missing_expected_files(output_dir: Path, expected_files: set[str]) -> list[str]:
+    """Return expected files that are missing from the output directory."""
+    local_files = {f.name for f in sorted(output_dir.glob("*.json"))}
+    return sorted(expected_file for expected_file in expected_files if expected_file not in local_files)
+
+
+def validate(
+    output_dir: Path, threshold: float, expected_files: set[str] | None = None
+) -> list[dict]:
     """Compare local output with latest R2 snapshot.
 
     Returns a list of warnings for providers that changed beyond the threshold.
@@ -105,28 +169,35 @@ def validate(output_dir: Path, threshold: float) -> list[dict]:
         print("No local JSON files found in output/, skipping validation.")
         return []
 
+    if expected_files is None:
+        expected_files = discover_expected_files()
+    if not expected_files:
+        raise ValueError("No provider scripts discovered for snapshot validation")
+
     warnings = []
 
-    # Check all providers present in either local or snapshot
-    all_providers = sorted(set(local_files.keys()) | set(snapshot.keys()))
+    # Scope validation to the providers defined in the current repo so
+    # retired historical snapshot entries do not cause false failures.
+    all_providers = sorted(expected_files)
+    missing_files = set(find_missing_expected_files(output_dir, expected_files))
 
     for filename in all_providers:
         provider = filename.removesuffix(".json")
 
-        if filename not in snapshot:
-            print(f"  {provider}: NEW (not in previous snapshot)")
-            continue
-
-        if filename not in local_files:
+        if filename in missing_files:
             warnings.append(
                 {
                     "provider": provider,
-                    "old": count_features(snapshot[filename]),
+                    "old": count_features(snapshot[filename]) if filename in snapshot else 0,
                     "new": 0,
                     "change_pct": -100.0,
                     "reason": "missing from output (scraper may have failed)",
                 }
             )
+            continue
+
+        if filename not in snapshot:
+            print(f"  {provider}: NEW (not in previous snapshot)")
             continue
 
         with open(local_files[filename]) as f:
@@ -178,6 +249,11 @@ def main():
         default=10.0,
         help="Percentage change threshold to trigger warning (default: 10)",
     )
+    parser.add_argument(
+        "--warn-only",
+        action="store_true",
+        help="Print warnings but exit successfully",
+    )
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
@@ -199,7 +275,8 @@ def main():
             )
         print(f"{'=' * 60}")
         print("Review these changes before trusting the data.")
-        sys.exit(1)
+        if not args.warn_only:
+            sys.exit(1)
     else:
         print("\nAll providers within expected range.")
 

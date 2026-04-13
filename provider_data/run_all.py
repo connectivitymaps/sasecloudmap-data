@@ -93,6 +93,22 @@ def run_provider(
         return False, (err_msg, err_msg)
 
 
+def remove_failed_refresh_output(script_path: Path) -> Path | None:
+    """Delete partial output written by a provider that failed during refresh."""
+    from provider_data.utils.validate_snapshot import extract_provider_name
+
+    provider_name = extract_provider_name(script_path)
+    if provider_name is None:
+        return None
+
+    output_path = Path("output") / f"{provider_name}.json"
+    if not output_path.exists():
+        return None
+
+    output_path.unlink()
+    return output_path
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Run all provider scripts with graceful failure handling."
@@ -111,6 +127,11 @@ def main():
         "--fail-fast",
         action="store_true",
         help="Exit with error code on first failure",
+    )
+    parser.add_argument(
+        "--fail-on-any-failure",
+        action="store_true",
+        help="Exit with error code after processing all providers if any failed",
     )
 
     args = parser.parse_args()
@@ -156,6 +177,11 @@ def main():
                 print(f"❌ {provider_name}: {short_err}")
                 results["failed"].append((provider_name, short_err, full_err))
 
+                if args.refresh:
+                    removed_output = remove_failed_refresh_output(script_path)
+                    if removed_output is not None:
+                        print(f"🧹 Removed partial output: {removed_output}")
+
                 if args.fail_fast:
                     print("\n💥 Fail-fast enabled, stopping")
                     executor.shutdown(wait=False, cancel_futures=True)
@@ -180,8 +206,12 @@ def main():
             for line in tb_lines:
                 print(f"   {line}")
 
-    # Always exit 0 unless fail-fast is enabled
-    # This allows the CI pipeline to continue even with partial failures
+    if results["failed"] and args.fail_on_any_failure:
+        print("\n💥 Completed with provider failures (exit 1)")
+        sys.exit(1)
+
+    # Always exit 0 unless fail-fast or fail-on-any-failure is enabled.
+    # This allows the CI pipeline to continue even with partial failures.
     print("\n✨ Completed (exit 0 - partial failures are acceptable)")
     sys.exit(0)
 

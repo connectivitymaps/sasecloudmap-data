@@ -31,26 +31,69 @@ jobs:
       - name: "Prepare output directory"
         run: |
           mkdir -p output
+          rm -f output/*.json
 
       - name: "Refresh all provider output"
+        id: refresh_all
+        continue-on-error: true
         run: |
-          uv run provider_data/run_all.py --refresh
+          uv run provider_data/run_all.py --refresh --fail-on-any-failure
 
       - name: "Run GeoJSON validation tests"
         run: |
           uv run pytest tests/test_geojson.py -v --tb=short
 
+      - name: "Warn when one or more refreshes fail"
+        if: steps.refresh_all.outcome == 'failure'
+        run: |
+          echo "::warning::One or more provider refreshes failed; continuing to deploy successful providers only."
+
+      - name: "Check refreshed output completeness"
+        id: output_completeness
+        run: |
+          missing="$(uv run python - <<'PY'
+          from pathlib import Path
+
+          from provider_data.utils.validate_snapshot import (
+              discover_expected_files,
+              find_missing_expected_files,
+          )
+
+          missing = find_missing_expected_files(Path("output"), discover_expected_files())
+          print(",".join(name.removesuffix(".json") for name in missing))
+          PY
+          )"
+          echo "missing=${missing}" >> "$GITHUB_OUTPUT"
+          if [ -n "$missing" ]; then
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: "Warn when refreshed output is incomplete"
+        if: steps.output_completeness.outputs.complete != 'true'
+        run: |
+          echo "::warning::Skipping snapshot validation and R2 upload because refreshed output is incomplete: ${{ steps.output_completeness.outputs.missing }}"
+
       - name: "Compare with previous R2 snapshot"
+        if: steps.refresh_all.outcome == 'success' && steps.output_completeness.outputs.complete == 'true'
         run: |
           uv run provider_data/utils/validate_snapshot.py
 
       - name: "Deploy refreshed output to dev"
         run: |
-          uv run provider_data/run_all.py --dev --fail-fast
+          uv run provider_data/run_all.py --dev --fail-on-any-failure
 
       - name: "Upload snapshots to R2"
+        if: steps.refresh_all.outcome == 'success' && steps.output_completeness.outputs.complete == 'true'
         run: |
           uv run provider_data/utils/upload_to_r2.py
+
+      - name: "Fail when refresh results are incomplete"
+        if: steps.refresh_all.outcome == 'failure' || steps.output_completeness.outputs.complete != 'true'
+        run: |
+          echo "::error::Refreshed output is incomplete or one or more refreshes failed: ${{ steps.output_completeness.outputs.missing }}"
+          exit 1
 
   generate-sitemap:
     needs: update-all-providers

@@ -3,12 +3,16 @@
 
 from io import BytesIO
 
+import pytest
 from botocore.exceptions import ClientError
 
 from provider_data.utils.upload_to_r2 import LATEST_POINTER_KEY, upload_snapshots
 from provider_data.utils.validate_snapshot import (
+    discover_expected_files,
     download_snapshot,
+    find_missing_expected_files,
     get_latest_snapshot_prefix,
+    validate,
 )
 
 
@@ -116,3 +120,138 @@ def test_upload_snapshots_updates_latest_pointer(monkeypatch, tmp_path):
             "ContentType": "text/plain; charset=utf-8",
         }
     ]
+
+
+def test_validate_ignores_retired_providers_present_only_in_snapshot(
+    monkeypatch, tmp_path
+):
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    (output_dir / "cloudflare.json").write_text('{"features": [1, 2]}', encoding="utf-8")
+
+    client = FakeS3Client(
+        latest_prefix="2026-04-09",
+        object_pages=[
+            {
+                "Contents": [
+                    {"Key": "2026-04-09/cloudflare.json"},
+                    {"Key": "2026-04-09/akamai.json"},
+                ]
+            }
+        ],
+    )
+    client.objects["2026-04-09/cloudflare.json"] = b'{"features": [1, 2]}'
+    client.objects["2026-04-09/akamai.json"] = b'{"features": [1, 2, 3]}'
+
+    monkeypatch.setenv("R2_BUCKET_NAME", "test-bucket")
+    monkeypatch.setattr(
+        "provider_data.utils.validate_snapshot.get_s3_client",
+        lambda: client,
+    )
+
+    warnings = validate(
+        output_dir,
+        threshold=10.0,
+        expected_files={"cloudflare.json"},
+    )
+
+    assert warnings == []
+
+
+def test_validate_warns_when_active_provider_is_missing_from_output(
+    monkeypatch, tmp_path
+):
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    (output_dir / "cloudflare.json").write_text('{"features": [1]}', encoding="utf-8")
+
+    client = FakeS3Client(
+        latest_prefix="2026-04-09",
+        object_pages=[
+            {
+                "Contents": [
+                    {"Key": "2026-04-09/cloudflare.json"},
+                    {"Key": "2026-04-09/forcepoint.json"},
+                ]
+            }
+        ],
+    )
+    client.objects["2026-04-09/cloudflare.json"] = b'{"features": [1]}'
+    client.objects["2026-04-09/forcepoint.json"] = b'{"features": [1, 2, 3]}'
+
+    monkeypatch.setenv("R2_BUCKET_NAME", "test-bucket")
+    monkeypatch.setattr(
+        "provider_data.utils.validate_snapshot.get_s3_client",
+        lambda: client,
+    )
+
+    warnings = validate(
+        output_dir,
+        threshold=10.0,
+        expected_files={"cloudflare.json", "forcepoint.json"},
+    )
+
+    assert warnings == [
+        {
+            "provider": "forcepoint",
+            "old": 3,
+            "new": 0,
+            "change_pct": -100.0,
+            "reason": "missing from output (scraper may have failed)",
+        }
+    ]
+
+
+def test_discover_expected_files_supports_assign_and_annotated_assign(tmp_path):
+    provider_dir = tmp_path / "provider_data"
+    provider_dir.mkdir()
+    (provider_dir / "alpha_geojson.py").write_text(
+        'provider_name = "alpha"\n',
+        encoding="utf-8",
+    )
+    (provider_dir / "beta.py").write_text(
+        'provider_name: str = "beta"\n',
+        encoding="utf-8",
+    )
+    (provider_dir / "run_all.py").write_text("", encoding="utf-8")
+    (provider_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    assert discover_expected_files(provider_dir) == {"alpha.json", "beta.json"}
+
+
+def test_find_missing_expected_files_reports_only_active_missing_outputs(tmp_path):
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    (output_dir / "cloudflare.json").write_text("{}", encoding="utf-8")
+
+    assert find_missing_expected_files(
+        output_dir,
+        {"cloudflare.json", "forcepoint.json"},
+    ) == ["forcepoint.json"]
+
+
+def test_validate_fails_closed_when_expected_files_cannot_be_discovered(
+    monkeypatch, tmp_path
+):
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    (output_dir / "cloudflare.json").write_text('{"features": [1]}', encoding="utf-8")
+
+    client = FakeS3Client(
+        latest_prefix="2026-04-09",
+        object_pages=[{"Contents": [{"Key": "2026-04-09/cloudflare.json"}]}],
+    )
+    client.objects["2026-04-09/cloudflare.json"] = b'{"features": [1]}'
+
+    monkeypatch.setenv("R2_BUCKET_NAME", "test-bucket")
+    monkeypatch.setattr(
+        "provider_data.utils.validate_snapshot.get_s3_client",
+        lambda: client,
+    )
+    monkeypatch.setattr(
+        "provider_data.utils.validate_snapshot.discover_expected_files",
+        lambda provider_dir=None: set(),
+    )
+
+    with pytest.raises(ValueError, match="No provider scripts discovered"):
+        validate(output_dir, threshold=10.0)

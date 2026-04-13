@@ -179,3 +179,66 @@ def test_run_all_uses_three_workers_for_refresh(monkeypatch):
 
     assert exc_info.value.code == 0
     assert captured["max_workers"] == 3
+
+
+def test_run_all_fails_at_end_when_fail_on_any_failure_is_enabled(monkeypatch):
+    from provider_data import run_all
+
+    class DummyFuture:
+        def result(self):
+            return False, ("RuntimeError: boom", "traceback")
+
+    future = DummyFuture()
+
+    class DummyExecutor:
+        def __init__(self, max_workers):
+            self.max_workers = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def submit(self, fn, *args):
+            return future
+
+    monkeypatch.setattr(
+        run_all,
+        "discover_providers",
+        lambda: [Path("provider_data/cloudflare_geojson.py")],
+    )
+    monkeypatch.setattr(run_all, "ThreadPoolExecutor", DummyExecutor)
+    monkeypatch.setattr(run_all, "as_completed", lambda futures: list(futures.keys()))
+    monkeypatch.setattr(
+        run_all.sys,
+        "argv",
+        ["run_all.py", "--dev", "--fail-on-any-failure"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_all.main()
+
+    assert exc_info.value.code == 1
+
+
+def test_remove_failed_refresh_output_deletes_partial_output(monkeypatch, tmp_path):
+    from provider_data import run_all
+
+    provider_script = tmp_path / "provider_data" / "cloudflare_geojson.py"
+    provider_script.parent.mkdir()
+    provider_script.write_text(
+        'provider_name = "cloudflare"\n',
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    output_file = output_dir / "cloudflare.json"
+    output_file.write_text("{}", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    removed_path = run_all.remove_failed_refresh_output(provider_script)
+
+    assert removed_path == Path("output/cloudflare.json")
+    assert not output_file.exists()
