@@ -9,7 +9,7 @@ This repository collects and transforms SASE/CDN provider datacenter location da
 - **Python 3.13+** with **uv** for package management
 - **httpx** - HTTP client for API requests
 - **BeautifulSoup4** - HTML parsing for scraping provider docs
-- **Playwright** - Browser automation (used by Forcepoint scraper)
+- **Cloudflare Browser Rendering** - Render dynamic pages and extract markdown/structured data
 - **python-dotenv** - Environment variable management
 - **ruff** - Linting and formatting
 
@@ -22,6 +22,7 @@ provider-data/
 │   ├── run_all.py           # Batch runner for all providers
 │   └── utils/
 │       ├── post_data.py     # API posting helper
+│       ├── browser_rendering.py # Cloudflare Browser Rendering helper
 │       ├── skeleton.py      # GeoJSON skeleton generator
 │       ├── generate_sitemap.py  # Sitemap generation utility
 │       └── upload_to_r2.py  # R2 historical snapshot uploader
@@ -76,8 +77,12 @@ Required in `.env`:
 - `BMS` - Additional auth header
 - `DEV_HOSTNAME` - Dev API endpoint (e.g., `https://dev.example.com/add`)
 - `PROD_HOSTNAME` - Prod API endpoint
+- `CLOUDFLARE_ACCOUNT_ID` - Cloudflare account ID
+- `CLOUDFLARE_API_TOKEN` - Cloudflare API token (used as fallback for Browser Rendering)
 - `CLOUDFLARE_ZONE_ID` - For cache purging
 - `CACHE_PURGE_KEY` - Cloudflare API token for cache operations
+- `BROWSER_RENDERING_API_TOKEN` - Optional Cloudflare API token with `Browser Rendering - Edit` permission
+- `BROWSER_RENDERING_JSON_MODEL` - Optional Browser Rendering JSON extraction model override
 - `R2_ACCOUNT_ID` - Cloudflare account ID (for R2 snapshots)
 - `R2_ACCESS_KEY_ID` - R2 API token access key ID
 - `R2_SECRET_ACCESS_KEY` - R2 API token secret access key
@@ -96,7 +101,7 @@ Required in `.env`:
 | Cisco Umbrella | `cisco_umbrella_geojson.py` | umbrella.cisco.com (HTML scrape) |
 | Cato Networks | `catonetworks.py` | support.catonetworks.com (CSV) |
 | iboss | `iboss_geojson.py` | status.iboss.com API |
-| Forcepoint | `forcepoint_geojson.py` | support.forcepoint.com (Playwright) |
+| Forcepoint | `forcepoint_geojson.py` | support.forcepoint.com (Browser Rendering `/json` with markdown fallback) |
 
 ## Adding a New Provider
 
@@ -149,3 +154,4 @@ Required in `.env`:
 - Many scripts use deduplication: `[i for n, i in enumerate(x) if i not in x[n+1:]]`
 - Error handling catches HTTP and parsing errors, logs failures but continues
 - Nominatim rate limiting (1 req/sec) is implemented in all provider scripts
+- Cloudflare account IDs in `.env` should be bare IDs, without trailing `/`

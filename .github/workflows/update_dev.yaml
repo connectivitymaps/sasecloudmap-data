@@ -49,10 +49,9 @@ jobs:
       - name: "Install the project"
         run: uv sync --all-extras --dev
 
-      - name: "Install playwright"
+      - name: "Prepare output directory"
         run: |
           mkdir -p output
-          uv run playwright install
 
       - name: "Update ${{ matrix.provider }}"
         run: |

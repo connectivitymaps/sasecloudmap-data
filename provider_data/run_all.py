@@ -29,8 +29,14 @@ def extract_error_summary(stderr: str) -> tuple[str, str]:
         # Common Python errors at end of traceback
         if re.match(r"^(\w+Error|\w+Exception):", line):
             return line[:200], stderr
-        # Playwright/browser errors
-        if "playwright" in line.lower() and "error" in line.lower():
+        # Browser automation / rendering errors
+        if (
+            any(
+                phrase in line.lower()
+                for phrase in ["browser rendering", "browser-rendering", "quick action"]
+            )
+            and "error" in line.lower()
+        ):
             return line[:200], stderr
 
     # Fallback: last non-empty line
@@ -55,12 +61,14 @@ def discover_providers() -> list[Path]:
     return providers
 
 
-def run_provider(script_path: Path, refresh: bool, dev: bool, prod: bool) -> tuple[bool, str]:
+def run_provider(
+    script_path: Path, refresh: bool, dev: bool, prod: bool
+) -> tuple[bool, str]:
     """Run a single provider script via subprocess.
 
     Returns (success, error_message).
     """
-    cmd = ["uv", "run", str(script_path)]
+    cmd = [sys.executable, str(script_path)]
     if refresh:
         cmd.append("--refresh")
     if dev:
@@ -89,7 +97,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Run all provider scripts with graceful failure handling."
     )
-    parser.add_argument("--refresh", action="store_true", help="Refresh data from sources")
+    parser.add_argument(
+        "--refresh", action="store_true", help="Refresh data from sources"
+    )
     parser.add_argument("--dev", action="store_true", help="Update dev environment")
     parser.add_argument("--prod", action="store_true", help="Update prod environment")
     parser.add_argument(
@@ -122,9 +132,9 @@ def main():
 
     results = {"success": [], "failed": []}
 
-    # When refreshing, run sequentially to respect Nominatim's 1 req/sec rate limit.
-    # Multiple scripts hitting Nominatim in parallel causes rate limiting and empty results.
-    max_workers = 1 if args.refresh else 5
+    # Use a small fixed worker pool so refreshes can parallelize without overwhelming
+    # shared geocoding APIs as aggressively as an unrestricted fan-out would.
+    max_workers = 3
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(

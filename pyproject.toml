@@ -8,7 +8,6 @@ dependencies = [
     "ruff>=0.15.6",
     "httpx>=0.28",
     "beautifulsoup4>=4.14.3",
-    "pytest-playwright>=0.7",
     "pytest>=9.0",
     "python-dotenv>=1.2.2",
     "pre-commit>=4.5.1",

@@ -12,7 +12,10 @@ from utils.skeleton import geojson_skeleton
 
 def get_cloudflare_data():
     """get cloudflare locations"""
-    resp = httpx.get("https://speed.cloudflare.com/locations", headers={"referer": "https://speed.cloudflare.com/"})
+    resp = httpx.get(
+        "https://speed.cloudflare.com/locations",
+        headers={"referer": "https://speed.cloudflare.com/"},
+    )
     resp.raise_for_status()
     colos = resp.json()
 
@@ -40,7 +43,9 @@ def get_jdcloud_data():
             ip_geolocation = httpx.get("https://ipinfo.io/{}".format(cidr))
             ip_geolocation.raise_for_status()
             geo_data = ip_geolocation.json()
-            locations.append({"name": geo_data["city"], "coordinates": geo_data["loc"].split(",")})
+            locations.append(
+                {"name": geo_data["city"], "coordinates": geo_data["loc"].split(",")}
+            )
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
             print(f"HTTP error for CIDR {cidr}: {e}")
         except (KeyError, ValueError) as e:

@@ -1,6 +1,9 @@
 import importlib
 import json
 import sys
+from pathlib import Path
+
+import pytest
 
 
 class DummyResponse:
@@ -105,3 +108,74 @@ def test_generate_sitemap_import_has_no_dotenv_side_effect(monkeypatch):
     importlib.import_module("provider_data.utils.generate_sitemap")
 
     assert calls == []
+
+
+def test_run_provider_uses_current_python_interpreter(monkeypatch):
+    from provider_data import run_all
+
+    captured = {}
+
+    class DummyCompletedProcess:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured.update(kwargs)
+        return DummyCompletedProcess()
+
+    monkeypatch.setattr(run_all.subprocess, "run", fake_run)
+
+    success, error = run_all.run_provider(
+        Path("provider_data/cloudflare_geojson.py"), refresh=True, dev=False, prod=False
+    )
+
+    assert success is True
+    assert error is None
+    assert captured["cmd"] == [
+        sys.executable,
+        "provider_data/cloudflare_geojson.py",
+        "--refresh",
+    ]
+
+
+def test_run_all_uses_three_workers_for_refresh(monkeypatch):
+    from provider_data import run_all
+
+    captured = {}
+
+    class DummyFuture:
+        def result(self):
+            return True, None
+
+    future = DummyFuture()
+
+    class DummyExecutor:
+        def __init__(self, max_workers):
+            captured["max_workers"] = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def submit(self, fn, *args):
+            captured["submitted"] = (fn, args)
+            return future
+
+    monkeypatch.setattr(
+        run_all,
+        "discover_providers",
+        lambda: [Path("provider_data/cloudflare_geojson.py")],
+    )
+    monkeypatch.setattr(run_all, "ThreadPoolExecutor", DummyExecutor)
+    monkeypatch.setattr(run_all, "as_completed", lambda futures: list(futures.keys()))
+    monkeypatch.setattr(run_all.sys, "argv", ["run_all.py", "--refresh"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_all.main()
+
+    assert exc_info.value.code == 0
+    assert captured["max_workers"] == 3
