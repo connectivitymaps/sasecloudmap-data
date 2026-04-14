@@ -5,7 +5,7 @@ import os
 import httpx
 from dotenv import load_dotenv
 
-from provider_data.utils.http import http_request_kwargs
+from provider_data.utils.http_config import http_request_kwargs
 
 DEFAULT_TIMEOUT = 60.0
 DEFAULT_MODEL = "workers-ai/@cf/moonshotai/kimi-k2.5"

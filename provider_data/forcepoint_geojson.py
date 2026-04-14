@@ -8,7 +8,7 @@ import time
 import httpx
 from provider_data.utils.base import convert_to_geojson as base_convert_to_geojson
 from provider_data.utils.browser_rendering import extract_json, extract_markdown
-from provider_data.utils.http import http_request_kwargs
+from provider_data.utils.http_config import http_request_kwargs
 from provider_data.utils.post_data import write_and_post
 from provider_data.utils.skeleton import geojson_skeleton
 

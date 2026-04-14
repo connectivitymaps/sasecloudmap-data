@@ -2,7 +2,7 @@ import pytest
 
 
 def test_http_request_kwargs_uses_default_trust_store_when_no_extra_ca(monkeypatch):
-    from provider_data.utils import http as http_utils
+    from provider_data.utils import http_config as http_utils
 
     monkeypatch.delenv("EXTRA_CA_CERT_FILE", raising=False)
     monkeypatch.setattr(http_utils, "load_dotenv", lambda: None)
@@ -12,7 +12,7 @@ def test_http_request_kwargs_uses_default_trust_store_when_no_extra_ca(monkeypat
 
 
 def test_http_request_kwargs_builds_ssl_context_from_extra_ca(monkeypatch, tmp_path):
-    from provider_data.utils import http as http_utils
+    from provider_data.utils import http_config as http_utils
 
     extra_bundle = tmp_path / "extra.pem"
     extra_bundle.write_text("EXTRA-CA\n", encoding="utf-8")
@@ -45,7 +45,7 @@ def test_http_request_kwargs_builds_ssl_context_from_extra_ca(monkeypatch, tmp_p
 
 
 def test_http_request_kwargs_can_explicitly_relax_x509_strict(monkeypatch, tmp_path):
-    from provider_data.utils import http as http_utils
+    from provider_data.utils import http_config as http_utils
 
     extra_bundle = tmp_path / "extra.pem"
     extra_bundle.write_text("EXTRA-CA\n", encoding="utf-8")
@@ -77,7 +77,7 @@ def test_http_request_kwargs_can_explicitly_relax_x509_strict(monkeypatch, tmp_p
 
 
 def test_http_request_kwargs_fails_fast_for_missing_extra_ca(monkeypatch):
-    from provider_data.utils import http as http_utils
+    from provider_data.utils import http_config as http_utils
 
     monkeypatch.setenv("EXTRA_CA_CERT_FILE", "/missing/corp-ca.pem")
     monkeypatch.setattr(http_utils, "load_dotenv", lambda: None)

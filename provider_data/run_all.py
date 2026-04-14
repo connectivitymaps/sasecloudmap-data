@@ -10,6 +10,12 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from provider_data.utils.provider_discovery import (
+    discover_provider_scripts,
+    extract_provider_name,
+    select_provider_scripts,
+)
+
 
 def extract_error_summary(stderr: str) -> tuple[str, str]:
     """Extract a clean error summary from stderr.
@@ -49,16 +55,7 @@ def extract_error_summary(stderr: str) -> tuple[str, str]:
 
 def discover_providers() -> list[Path]:
     """Discover all provider scripts in the provider_data directory."""
-    provider_dir = Path(__file__).parent
-    providers = []
-    for script in sorted(provider_dir.glob("*_geojson.py")):
-        providers.append(script)
-    # Also include scripts without _geojson suffix (like catonetworks.py)
-    for script in sorted(provider_dir.glob("*.py")):
-        if script.name not in ["run_all.py", "__init__.py"] and script not in providers:
-            if not script.name.startswith("_"):
-                providers.append(script)
-    return providers
+    return discover_provider_scripts(Path(__file__).parent)
 
 
 def run_provider(
@@ -95,8 +92,6 @@ def run_provider(
 
 def remove_failed_refresh_output(script_path: Path) -> Path | None:
     """Delete partial output written by a provider that failed during refresh."""
-    from provider_data.utils.validate_snapshot import extract_provider_name
-
     provider_name = extract_provider_name(script_path)
     if provider_name is None:
         return None
@@ -121,7 +116,7 @@ def main():
     parser.add_argument(
         "--provider",
         type=str,
-        help="Run only specific provider (by name, without .py)",
+        help="Run only a specific provider (script stem or declared provider_name)",
     )
     parser.add_argument(
         "--fail-fast",
@@ -143,7 +138,7 @@ def main():
     providers = discover_providers()
 
     if args.provider:
-        providers = [p for p in providers if p.stem == args.provider]
+        providers = select_provider_scripts(providers, args.provider)
         if not providers:
             print(f"❌ Provider '{args.provider}' not found")
             sys.exit(1)

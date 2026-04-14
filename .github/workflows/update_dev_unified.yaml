@@ -9,9 +9,44 @@ on:
     - cron: '0 18 * * 1'
 
 jobs:
-  update-all-providers:
+  prepare:
     runs-on: ubuntu-latest
-    name: "Update all providers"
+    outputs:
+      providers: ${{ steps.discover.outputs.providers }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Discover providers"
+        id: discover
+        run: |
+          python -m provider_data.utils.provider_discovery --github-output "$GITHUB_OUTPUT"
+
+      - name: "prep env"
+        env:
+          DOTENV: ${{ secrets.DOTENV }}
+        run: |
+          echo -n $DOTENV | base64 -d > .env
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v6
+
+      - name: "Install the project"
+        run: uv sync --all-extras --dev
+
+      - name: "Run test suite"
+        run: |
+          uv run pytest tests/ -q
+
+  update-providers:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        provider: ${{ fromJson(needs.prepare.outputs.providers) }}
+      fail-fast: false
+
+    name: "Update ${{ matrix.provider.provider_name }}"
 
     steps:
       - uses: actions/checkout@v4
@@ -33,71 +68,90 @@ jobs:
           mkdir -p output
           rm -f output/*.json
 
-      - name: "Refresh all provider output"
-        id: refresh_all
+      - name: "Refresh ${{ matrix.provider.provider_name }}"
+        id: refresh
         continue-on-error: true
         run: |
-          uv run provider_data/run_all.py --refresh --fail-on-any-failure
+          uv run provider_data/${{ matrix.provider.script }}.py --refresh
 
-      - name: "Run GeoJSON validation tests"
+      - name: "Check refreshed output exists"
+        id: output_exists
+        if: steps.refresh.outcome == 'success'
         run: |
-          uv run pytest tests/test_geojson.py -v --tb=short
-
-      - name: "Warn when one or more refreshes fail"
-        if: steps.refresh_all.outcome == 'failure'
-        run: |
-          echo "::warning::One or more provider refreshes failed; continuing to deploy successful providers only."
-
-      - name: "Check refreshed output completeness"
-        id: output_completeness
-        run: |
-          missing="$(uv run python - <<'PY'
-          from pathlib import Path
-
-          from provider_data.utils.validate_snapshot import (
-              discover_expected_files,
-              find_missing_expected_files,
-          )
-
-          missing = find_missing_expected_files(Path("output"), discover_expected_files())
-          print(",".join(name.removesuffix(".json") for name in missing))
-          PY
-          )"
-          echo "missing=${missing}" >> "$GITHUB_OUTPUT"
-          if [ -n "$missing" ]; then
-            echo "complete=false" >> "$GITHUB_OUTPUT"
+          if [ -f "output/${{ matrix.provider.output_file }}" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "complete=true" >> "$GITHUB_OUTPUT"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Refresh finished without writing output/${{ matrix.provider.output_file }}"
           fi
 
-      - name: "Warn when refreshed output is incomplete"
-        if: steps.output_completeness.outputs.complete != 'true'
+      - name: "Validate GeoJSON for ${{ matrix.provider.provider_name }}"
+        if: steps.refresh.outcome == 'success' && steps.output_exists.outputs.exists == 'true'
         run: |
-          echo "::warning::Skipping snapshot validation and R2 upload because refreshed output is incomplete: ${{ steps.output_completeness.outputs.missing }}"
+          uv run pytest tests/test_geojson.py -q
 
-      - name: "Compare with previous R2 snapshot"
-        if: steps.refresh_all.outcome == 'success' && steps.output_completeness.outputs.complete == 'true'
+      - name: "Validate snapshot drift for ${{ matrix.provider.provider_name }}"
+        id: snapshot
+        if: steps.refresh.outcome == 'success' && steps.output_exists.outputs.exists == 'true'
+        continue-on-error: true
         run: |
-          uv run provider_data/utils/validate_snapshot.py
+          uv run python -m provider_data.utils.validate_provider_snapshot \
+            --expected-file "${{ matrix.provider.output_file }}" \
+            --output-dir output \
+            --threshold 10.0
 
-      - name: "Deploy refreshed output to dev"
+      - name: "Deploy ${{ matrix.provider.provider_name }} to dev"
+        id: deploy
+        if: steps.refresh.outcome == 'success' && steps.output_exists.outputs.exists == 'true' && steps.snapshot.outcome == 'success'
+        continue-on-error: true
         run: |
-          uv run provider_data/run_all.py --dev --fail-on-any-failure
+          uv run provider_data/${{ matrix.provider.script }}.py --dev
 
-      - name: "Upload snapshots to R2"
-        if: steps.refresh_all.outcome == 'success' && steps.output_completeness.outputs.complete == 'true'
+      - name: "Record provider outcome"
+        if: always()
+        env:
+          OUTPUT_EXISTS: ${{ steps.output_exists.outputs.exists }}
+          SNAPSHOT_OUTCOME: ${{ steps.snapshot.outcome }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
         run: |
-          uv run provider_data/utils/upload_to_r2.py
+          uv run python -m provider_data.utils.workflow_status \
+            --provider-name "${{ matrix.provider.provider_name }}" \
+            --script "${{ matrix.provider.script }}" \
+            --output-file "${{ matrix.provider.output_file }}" \
+            --refresh-outcome "${{ steps.refresh.outcome }}" \
+            --output-exists "${OUTPUT_EXISTS:-false}" \
+            --snapshot-outcome "${SNAPSHOT_OUTCOME:-skipped}" \
+            --deploy-outcome "${DEPLOY_OUTCOME:-skipped}" \
+            --status-dir .provider-status
 
-      - name: "Fail when refresh results are incomplete"
-        if: steps.refresh_all.outcome == 'failure' || steps.output_completeness.outputs.complete != 'true'
+      - name: "Upload provider status artifact"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-status-${{ matrix.provider.provider_name }}
+          path: .provider-status/${{ matrix.provider.provider_name }}.json
+          if-no-files-found: error
+
+      - name: "Upload eligible provider output artifact"
+        if: steps.deploy.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-output-${{ matrix.provider.provider_name }}
+          path: output/${{ matrix.provider.output_file }}
+          if-no-files-found: error
+
+      - name: "Fail provider job when refresh, validation, or dev deploy failed"
+        if: steps.refresh.outcome != 'success' || steps.output_exists.outputs.exists != 'true' || steps.snapshot.outcome == 'failure' || steps.deploy.outcome == 'failure'
         run: |
-          echo "::error::Refreshed output is incomplete or one or more refreshes failed: ${{ steps.output_completeness.outputs.missing }}"
+          echo "::error::${{ matrix.provider.provider_name }} was not eligible for dev deploy and fresh snapshot publication."
           exit 1
 
-  generate-sitemap:
-    needs: update-all-providers
+  finalize-dev-update:
+    needs: [prepare, update-providers]
     runs-on: ubuntu-latest
+    if: always() && needs.prepare.result == 'success'
+    outputs:
+      has_deployed: ${{ steps.finalize.outputs.has_deployed }}
 
     steps:
       - uses: actions/checkout@v4
@@ -114,6 +168,52 @@ jobs:
       - name: "Install the project"
         run: uv sync --all-extras --dev
 
+      - name: "Download provider artifacts"
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: .artifacts
+
+      - name: "Finalize dev update"
+        id: finalize
+        env:
+          EXPECTED_PROVIDERS: ${{ needs.prepare.outputs.providers }}
+        run: |
+          uv run python -m provider_data.utils.finalize_dev_update \
+            --expected-providers-json "${EXPECTED_PROVIDERS}" \
+            --artifacts-dir .artifacts \
+            --output-dir output \
+            --github-output "$GITHUB_OUTPUT"
+
       - name: "Generate sitemap"
+        if: steps.finalize.outputs.has_deployed == 'true'
         run: |
           uv run provider_data/utils/generate_sitemap.py --dev
+
+  notify-on-failure:
+    needs: [prepare, update-providers, finalize-dev-update]
+    runs-on: ubuntu-latest
+    if: >-
+      always() && (
+        needs.prepare.result == 'failure' ||
+        needs.update-providers.result == 'failure' ||
+        needs.finalize-dev-update.result == 'failure'
+      )
+
+    steps:
+      - name: "Notify in Chat on Failure"
+        env:
+          WEBHOOK_URL: ${{ secrets.G_WEBHOOK }}
+        run: |
+          curl -s -H "content-type: application/json" \
+            -d '{
+              "text": "🚨 Provider Data Update Failed!\n\n
+              Workflow: ${{ github.workflow }}\n
+              Repository: ${{ github.repository }}\n
+              Branch: ${{ github.ref_name }}\n
+              Commit: ${{ github.sha }}\n
+              Triggered by: ${{ github.actor }}\n\n
+              View details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }' \
+            "${WEBHOOK_URL}" >/dev/null

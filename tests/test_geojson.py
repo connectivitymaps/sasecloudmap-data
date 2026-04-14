@@ -202,7 +202,9 @@ class TestOutputFiles:
             if len(data.get("features", [])) == 0:
                 empty_files.append(filepath.name)
         if empty_files:
-            pytest.skip(f"Files with no features (may be expected): {', '.join(empty_files)}")
+            pytest.skip(
+                f"Files with no features (may be expected): {', '.join(empty_files)}"
+            )
 
 
 class TestProviderScripts:

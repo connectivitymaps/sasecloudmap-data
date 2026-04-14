@@ -12,7 +12,9 @@ Required environment variables:
 """
 
 import argparse
+import json
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -32,6 +34,45 @@ def get_s3_client():
         aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
         region_name="auto",
     )
+
+
+def prepare_snapshot_upload_dir(
+    output_dir: Path,
+    staging_dir: Path,
+    allowed_files: set[str],
+    *,
+    expected_files: set[str] | None = None,
+    previous_snapshot: dict[str, dict] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Stage upload files, carrying forward prior snapshot data for blocked providers."""
+    previous_snapshot = previous_snapshot or {}
+    if expected_files is None:
+        expected_files = set(allowed_files)
+
+    staged_current = []
+    carried_forward = []
+
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
+    for filename in sorted(expected_files):
+        destination = staging_dir / filename
+
+        if filename in allowed_files:
+            source = output_dir / filename
+            if not source.exists():
+                continue
+            shutil.copy2(source, destination)
+            staged_current.append(filename)
+            continue
+
+        prior_data = previous_snapshot.get(filename)
+        if prior_data is None:
+            continue
+
+        destination.write_text(json.dumps(prior_data), encoding="utf-8")
+        carried_forward.append(filename)
+
+    return staged_current, carried_forward
 
 
 def upload_snapshots(output_dir: Path, timestamp: str | None = None):

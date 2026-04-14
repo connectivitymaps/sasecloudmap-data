@@ -1,10 +1,10 @@
 import pytest
 
 
-def test_browser_rendering_json_request_uses_account_id_as_configured(monkeypatch):
+def test_browser_rendering_json_request_uses_account_id(monkeypatch):
     from provider_data.utils import browser_rendering
 
-    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "acct-123/")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "acct-123")
     monkeypatch.setenv("BROWSER_RENDERING_API_TOKEN", "")
     monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "token-123")
     monkeypatch.setenv(
@@ -36,7 +36,7 @@ def test_browser_rendering_json_request_uses_account_id_as_configured(monkeypatc
 
     assert result == {"rows": []}
     assert captured["url"] == (
-        "https://api.cloudflare.com/client/v4/accounts/acct-123//browser-rendering/json"
+        "https://api.cloudflare.com/client/v4/accounts/acct-123/browser-rendering/json"
     )
     assert captured["headers"]["Authorization"] == "Bearer token-123"
     assert captured["json"]["custom_ai"] == [

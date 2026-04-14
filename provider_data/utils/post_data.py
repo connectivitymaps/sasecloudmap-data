@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 import httpx
 from dotenv import load_dotenv
 
-from provider_data.utils.http import http_request_kwargs
+from provider_data.utils.http_config import http_request_kwargs
 
 
 REQUEST_TIMEOUT = 30.0

@@ -14,7 +14,6 @@ Required environment variables:
 """
 
 import argparse
-import ast
 import json
 import os
 import sys
@@ -23,6 +22,7 @@ from pathlib import Path
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 
+from provider_data.utils.provider_discovery import discover_expected_files
 from provider_data.utils.upload_to_r2 import LATEST_POINTER_KEY, get_s3_client
 
 
@@ -50,14 +50,11 @@ def get_latest_snapshot_prefix(client, bucket: str) -> str | None:
     prefixes = []
     for page in paginator.paginate(Bucket=bucket, Delimiter="/"):
         prefixes.extend(
-            prefix["Prefix"].rstrip("/")
-            for prefix in page.get("CommonPrefixes", [])
+            prefix["Prefix"].rstrip("/") for prefix in page.get("CommonPrefixes", [])
         )
     if not prefixes:
         return None
-    print(
-        f"{LATEST_POINTER_KEY} not found in R2, falling back to prefix listing."
-    )
+    print(f"{LATEST_POINTER_KEY} not found in R2, falling back to prefix listing.")
     return sorted(prefixes)[-1]
 
 
@@ -81,65 +78,16 @@ def count_features(geojson: dict) -> int:
     return len(geojson.get("features", []))
 
 
-def _extract_string_constant(node: ast.AST) -> str | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    return None
-
-
-def extract_provider_name(script_path: Path) -> str | None:
-    """Extract a provider's output filename stem from its script."""
-    try:
-        tree = ast.parse(script_path.read_text(encoding="utf-8"))
-    except (OSError, SyntaxError):
-        return None
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            value = _extract_string_constant(node.value)
-            if value is None:
-                continue
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "provider_name":
-                    return value
-        elif isinstance(node, ast.AnnAssign):
-            value = _extract_string_constant(node.value)
-            if (
-                value is not None
-                and isinstance(node.target, ast.Name)
-                and node.target.id == "provider_name"
-            ):
-                return value
-    return None
-
-
-def discover_expected_files(provider_dir: Path | None = None) -> set[str]:
-    """Discover the output JSON files expected from the current provider scripts."""
-    if provider_dir is None:
-        provider_dir = Path(__file__).resolve().parent.parent
-
-    expected_files = set()
-    geojson_scripts = sorted(provider_dir.glob("*_geojson.py"))
-    other_scripts = sorted(
-        script
-        for script in provider_dir.glob("*.py")
-        if script.name not in {"run_all.py", "__init__.py"}
-        and not script.name.startswith("_")
-        and script not in geojson_scripts
-    )
-
-    for script_path in [*geojson_scripts, *other_scripts]:
-        provider_name = extract_provider_name(script_path)
-        if provider_name:
-            expected_files.add(f"{provider_name}.json")
-
-    return expected_files
-
-
-def find_missing_expected_files(output_dir: Path, expected_files: set[str]) -> list[str]:
+def find_missing_expected_files(
+    output_dir: Path, expected_files: set[str]
+) -> list[str]:
     """Return expected files that are missing from the output directory."""
     local_files = {f.name for f in sorted(output_dir.glob("*.json"))}
-    return sorted(expected_file for expected_file in expected_files if expected_file not in local_files)
+    return sorted(
+        expected_file
+        for expected_file in expected_files
+        if expected_file not in local_files
+    )
 
 
 def validate(
@@ -188,7 +136,9 @@ def validate(
             warnings.append(
                 {
                     "provider": provider,
-                    "old": count_features(snapshot[filename]) if filename in snapshot else 0,
+                    "old": count_features(snapshot[filename])
+                    if filename in snapshot
+                    else 0,
                     "new": 0,
                     "change_pct": -100.0,
                     "reason": "missing from output (scraper may have failed)",

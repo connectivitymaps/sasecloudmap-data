@@ -14,11 +14,7 @@ jobs:
       - name: Find provider scripts
         id: find-providers
         run: |
-          providers=$(for i in provider_data/*.py; do \
-            basename "$i" .py; done | grep -v utils | \
-            jq -R -s -c 'split("\n")[:-1]')
-          echo "providers=$providers" >> $GITHUB_OUTPUT
-          echo "Found providers: $providers"
+          python -m provider_data.utils.provider_discovery --github-output "$GITHUB_OUTPUT"
 
   update-providers:
     needs: discover-providers
@@ -28,7 +24,7 @@ jobs:
         provider: ${{ fromJson(needs.discover-providers.outputs.providers) }}
       fail-fast: false
 
-    name: "Update ${{ matrix.provider }}"
+    name: "Update ${{ matrix.provider.provider_name }}"
 
     steps:
       - uses: actions/checkout@v4
@@ -45,9 +41,9 @@ jobs:
       - name: "Install the project"
         run: uv sync --all-extras --dev
 
-      - name: "Update ${{ matrix.provider }}"
+      - name: "Update ${{ matrix.provider.provider_name }}"
         run: |
-          uv run provider_data/${{ matrix.provider }}.py --prod
+          uv run provider_data/${{ matrix.provider.script }}.py --prod
 
   generate-sitemap:
     needs: update-providers

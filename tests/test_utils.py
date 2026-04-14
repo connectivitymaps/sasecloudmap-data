@@ -222,6 +222,54 @@ def test_run_all_fails_at_end_when_fail_on_any_failure_is_enabled(monkeypatch):
     assert exc_info.value.code == 1
 
 
+def test_run_all_provider_flag_accepts_declared_provider_name(monkeypatch, tmp_path):
+    from provider_data import run_all
+
+    provider_script = tmp_path / "provider_data" / "fortinet_geojson.py"
+    provider_script.parent.mkdir()
+    provider_script.write_text(
+        'provider_name = "fortisase"\n',
+        encoding="utf-8",
+    )
+
+    captured = {}
+
+    class DummyFuture:
+        def result(self):
+            return True, None
+
+    future = DummyFuture()
+
+    class DummyExecutor:
+        def __init__(self, max_workers):
+            self.max_workers = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def submit(self, fn, *args):
+            captured["submitted_args"] = args
+            return future
+
+    monkeypatch.setattr(run_all, "discover_providers", lambda: [provider_script])
+    monkeypatch.setattr(run_all, "ThreadPoolExecutor", DummyExecutor)
+    monkeypatch.setattr(run_all, "as_completed", lambda futures: list(futures.keys()))
+    monkeypatch.setattr(
+        run_all.sys,
+        "argv",
+        ["run_all.py", "--dev", "--provider", "fortisase"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_all.main()
+
+    assert exc_info.value.code == 0
+    assert captured["submitted_args"][0] == provider_script
+
+
 def test_remove_failed_refresh_output_deletes_partial_output(monkeypatch, tmp_path):
     from provider_data import run_all
 

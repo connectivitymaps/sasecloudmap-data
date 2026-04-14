@@ -9,7 +9,7 @@ from urllib.parse import quote_plus
 
 import httpx
 from utils.base import convert_to_geojson
-from utils.http import http_request_kwargs
+from utils.http_config import http_request_kwargs
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
