@@ -19,10 +19,7 @@ jobs:
   update-providers:
     needs: discover-providers
     runs-on: ubuntu-24.04
-    concurrency:
-      group: "shared-proxy-endpoint"
     strategy:
-      max-parallel: 1
       matrix:
         provider: ${{ fromJson(needs.discover-providers.outputs.providers) }}
       fail-fast: false
@@ -43,18 +40,6 @@ jobs:
 
       - name: "Install the project"
         run: uv sync --all-extras --dev
-
-      - name: "Authorize runner IP for shared proxy endpoint"
-        run: |
-          uv run python -m provider_data.utils.update_proxy_endpoint --propagation-seconds 15
-
-      - name: "Export HTTPS proxy environment"
-        shell: bash
-        run: |
-          set -a
-          source .env
-          set +a
-          echo "HTTPS_PROXY=https://${PROXY_ENDPOINT}:443" >> "$GITHUB_ENV"
 
       - name: "Update ${{ matrix.provider.provider_name }}"
         run: |

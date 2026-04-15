@@ -25,6 +25,19 @@ def _job_block(workflow_text: str, job_name: str) -> str:
     return "\n".join(lines[start:end])
 
 
+def _step_block(job_block: str, step_name: str) -> str:
+    lines = job_block.splitlines()
+    start = lines.index(f'      - name: "{step_name}"')
+    end = len(lines)
+
+    for index in range(start + 1, len(lines)):
+        if lines[index].startswith("      - name:"):
+            end = index
+            break
+
+    return "\n".join(lines[start:end])
+
+
 def test_build_provider_status_marks_snapshot_warning_as_ineligible():
     from provider_data.utils.workflow_status import build_provider_status
 
@@ -241,44 +254,53 @@ def test_validate_provider_snapshot_wrapper_exits_nonzero_on_warning(monkeypatch
         validate_provider_snapshot.main()
 
 
-@pytest.mark.parametrize(
-    ("workflow_path", "provider_step_name"),
-    [
-        (
-            ".github/workflows/update_dev_unified.yaml",
-            'name: "Refresh ${{ matrix.provider.provider_name }}"',
-        ),
-        (
-            ".github/workflows/update_main.yaml",
-            'name: "Update ${{ matrix.provider.provider_name }}"',
-        ),
-    ],
-)
-def test_update_providers_workflow_serializes_proxy_setup(
-    workflow_path, provider_step_name
-):
-    job_block = _job_block(_read_workflow(workflow_path), "update-providers")
+def test_dev_update_workflow_scopes_proxy_to_refresh_step():
+    job_block = _job_block(
+        _read_workflow(".github/workflows/update_dev_unified.yaml"),
+        "update-providers",
+    )
+    refresh_step = _step_block(
+        job_block, "Refresh ${{ matrix.provider.provider_name }}"
+    )
 
     assert 'group: "shared-proxy-endpoint"' in job_block
     assert "max-parallel: 1" in job_block
-    assert 'name: "Install the project"' in job_block
     assert 'name: "Authorize runner IP for shared proxy endpoint"' in job_block
-    assert 'name: "Export HTTPS proxy environment"' in job_block
-    assert provider_step_name in job_block
+    assert 'name: "Export HTTPS proxy environment"' not in job_block
     assert (
         "uv run python -m provider_data.utils.update_proxy_endpoint"
         " --propagation-seconds 15" in job_block
     )
-    assert "source .env" in job_block
     assert (
-        'echo "HTTPS_PROXY=https://${PROXY_ENDPOINT}:443" >> "$GITHUB_ENV"' in job_block
+        'echo "HTTPS_PROXY=https://${PROXY_ENDPOINT}:443" >> "$GITHUB_ENV"'
+        not in job_block
+    )
+    assert "source .env" in refresh_step
+    assert (
+        'HTTPS_PROXY="https://${PROXY_ENDPOINT}:443" '
+        "uv run provider_data/${{ matrix.provider.script }}.py --refresh"
+        in refresh_step
     )
 
-    install_index = job_block.index('name: "Install the project"')
     authorize_index = job_block.index(
         'name: "Authorize runner IP for shared proxy endpoint"'
     )
-    export_index = job_block.index('name: "Export HTTPS proxy environment"')
-    provider_step_index = job_block.index(provider_step_name, export_index + 1)
+    refresh_index = job_block.index(
+        'name: "Refresh ${{ matrix.provider.provider_name }}"'
+    )
 
-    assert install_index < authorize_index < export_index < provider_step_index
+    assert authorize_index < refresh_index
+
+
+def test_main_update_workflow_does_not_enable_proxy():
+    job_block = _job_block(
+        _read_workflow(".github/workflows/update_main.yaml"),
+        "update-providers",
+    )
+
+    assert 'group: "shared-proxy-endpoint"' not in job_block
+    assert "max-parallel: 1" not in job_block
+    assert 'name: "Authorize runner IP for shared proxy endpoint"' not in job_block
+    assert 'name: "Export HTTPS proxy environment"' not in job_block
+    assert "provider_data.utils.update_proxy_endpoint" not in job_block
+    assert "HTTPS_PROXY=" not in job_block

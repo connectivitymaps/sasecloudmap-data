@@ -70,14 +70,6 @@ jobs:
         run: |
           uv run python -m provider_data.utils.update_proxy_endpoint --propagation-seconds 15
 
-      - name: "Export HTTPS proxy environment"
-        shell: bash
-        run: |
-          set -a
-          source .env
-          set +a
-          echo "HTTPS_PROXY=https://${PROXY_ENDPOINT}:443" >> "$GITHUB_ENV"
-
       - name: "Prepare output directory"
         run: |
           mkdir -p output
@@ -87,7 +79,10 @@ jobs:
         id: refresh
         continue-on-error: true
         run: |
-          uv run provider_data/${{ matrix.provider.script }}.py --refresh
+          set -a
+          source .env
+          set +a
+          HTTPS_PROXY="https://${PROXY_ENDPOINT}:443" uv run provider_data/${{ matrix.provider.script }}.py --refresh
 
       - name: "Check refreshed output exists"
         id: output_exists
