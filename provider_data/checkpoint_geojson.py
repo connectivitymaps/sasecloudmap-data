@@ -14,8 +14,27 @@ from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
 
+COUNTRY_ALIASES = {
+    "UK": "United Kingdom",
+    "USA": "United States",
+}
+
+
 def normalize_location_text(text: str) -> str:
     return re.sub(r"\s*\(\d+\)\s*$", "", text).strip()
+
+
+def build_geocode_queries(location_text: str) -> list[str]:
+    parts = [part.strip() for part in location_text.split(",")]
+    if not parts:
+        return []
+
+    parts[0] = re.sub(r"\s+\d+$", "", parts[0]).strip()
+    if parts[-1] in COUNTRY_ALIASES:
+        parts[-1] = COUNTRY_ALIASES[parts[-1]]
+
+    query = ", ".join(part for part in parts if part)
+    return [query] if query else []
 
 
 def extract_checkpoint_locations(html: str) -> list[str]:
@@ -41,27 +60,29 @@ def get_data():
     locations = []
 
     for loc in extract_checkpoint_locations(resp.text):
-        try:
-            req = httpx.get(
-                "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1&accept-language=en".format(
-                    quote_plus(loc)
-                ),
-                **http_request_kwargs(),
-            )
-            req.raise_for_status()
-            data = req.json()
-            locations.append(
-                {
-                    "name": data[0]["name"],
-                    "coordinates": [data[0]["lat"], data[0]["lon"]],
-                }
-            )
-        except (httpx.HTTPStatusError, httpx.RequestError) as e:
-            print(f"HTTP error for location {loc}: {e}")
-        except (KeyError, IndexError, ValueError) as e:
-            print(f"Failed to parse location {loc}: {e}")
-        finally:
-            time.sleep(1)  # Nominatim rate limit: 1 request/second
+        for query in build_geocode_queries(loc):
+            try:
+                req = httpx.get(
+                    "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1&accept-language=en".format(
+                        quote_plus(query)
+                    ),
+                    **http_request_kwargs(),
+                )
+                req.raise_for_status()
+                data = req.json()
+                locations.append(
+                    {
+                        "name": loc,
+                        "coordinates": [data[0]["lat"], data[0]["lon"]],
+                    }
+                )
+                break
+            except (httpx.HTTPStatusError, httpx.RequestError) as e:
+                print(f"HTTP error for location {query}: {e}")
+            except (KeyError, IndexError, ValueError) as e:
+                print(f"Failed to parse location {query}: {e}")
+            finally:
+                time.sleep(1)  # Nominatim rate limit: 1 request/second
 
     return locations
 

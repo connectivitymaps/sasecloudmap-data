@@ -14,18 +14,68 @@ from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
 
-def extract_location_queries(csv_text: str) -> list[str]:
+COUNTRY_ALIASES = {
+    "CAN": "Canada",
+    "ECUA": "Ecuador",
+    "MEX": "Mexico",
+    "UAE": "United Arab Emirates",
+    "UK": "United Kingdom",
+}
+
+LOCATION_ALIASES = {
+    "Vancourver": "Vancouver",
+}
+
+
+def normalize_location_text(location_text: str) -> str:
+    normalized = location_text.strip()
+    if not normalized:
+        return normalized
+
+    for alias, replacement in LOCATION_ALIASES.items():
+        normalized = normalized.replace(alias, replacement)
+
+    parts = [part.strip() for part in normalized.split(",")]
+    if parts and parts[-1] in COUNTRY_ALIASES:
+        parts[-1] = COUNTRY_ALIASES[parts[-1]]
+    return ", ".join(parts)
+
+
+def extract_location_rows(csv_text: str) -> list[dict[str, str]]:
     csv_file = StringIO(csv_text)
     reader = csv.DictReader(csv_file, delimiter=",")
-    queries = []
+    locations = []
     for row in reader:
-        query = (
-            row.get("Serviced Through (for Geo Location)", "").strip()
-            or row["PoP\xa0Location"].strip()
+        pop_location = normalize_location_text(row.get("PoP\xa0Location", ""))
+        serviced_through = normalize_location_text(
+            row.get("Serviced Through (for Geo Location)", "")
         )
-        if query:
-            queries.append(query)
-    return list(dict.fromkeys(queries))
+        region = (row.get("\ufeffRegion") or row.get("Region") or "").strip()
+
+        if region == "Geo-Localized Ips" and serviced_through:
+            geocode_query = serviced_through
+            display_name = serviced_through
+        else:
+            geocode_query = pop_location
+            display_name = pop_location
+
+        if geocode_query:
+            locations.append(
+                {
+                    "display_name": display_name,
+                    "geocode_query": geocode_query,
+                }
+            )
+
+    deduplicated = []
+    seen_queries = set()
+    for location in locations:
+        query = location["geocode_query"]
+        if query in seen_queries:
+            continue
+        seen_queries.add(query)
+        deduplicated.append(location)
+    return deduplicated
 
 
 def get_data():
@@ -36,11 +86,12 @@ def get_data():
     resp.raise_for_status()
     locations = []
 
-    for pop in extract_location_queries(resp.text):
+    for location in extract_location_rows(resp.text):
+        query = location["geocode_query"]
         try:
             req = httpx.get(
                 "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1&accept-language=en".format(
-                    quote_plus(pop)
+                    quote_plus(query)
                 ),
                 **http_request_kwargs(),
             )
@@ -48,14 +99,14 @@ def get_data():
             data = req.json()
             locations.append(
                 {
-                    "name": data[0]["name"],
+                    "name": location["display_name"],
                     "coordinates": [data[0]["lat"], data[0]["lon"]],
                 }
             )
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
-            print(f"HTTP error for location {pop}: {e}")
+            print(f"HTTP error for location {query}: {e}")
         except (KeyError, IndexError, ValueError) as e:
-            print(f"Failed to parse location {pop}: {e}")
+            print(f"Failed to parse location {query}: {e}")
         finally:
             time.sleep(1)  # Nominatim rate limit: 1 request/second
 

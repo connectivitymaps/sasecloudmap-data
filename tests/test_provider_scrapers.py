@@ -17,11 +17,20 @@ def test_cato_prefers_serviced_through_geo_location(monkeypatch):
 
     csv_text = """Region,PoP\xa0Location,IP\xa0Range,Serviced Through (for Geo Location)\nGeo-Localized Ips,Albania,1-2,Milan\nAsia,\"Auckland, NZ\",1-2,\nGeo-Localized Ips,Bahamas,1-2,Miami\n"""
 
-    assert catonetworks.extract_location_queries(csv_text) == [
-        "Milan",
-        "Auckland, NZ",
-        "Miami",
+    assert catonetworks.extract_location_rows(csv_text) == [
+        {"display_name": "Milan", "geocode_query": "Milan"},
+        {"display_name": "Auckland, NZ", "geocode_query": "Auckland, NZ"},
+        {"display_name": "Miami", "geocode_query": "Miami"},
     ]
+
+
+def test_cato_normalizes_known_city_and_country_aliases(monkeypatch):
+    catonetworks = import_provider_module(monkeypatch, "catonetworks")
+
+    assert catonetworks.normalize_location_text("Vancourver, CAN") == "Vancouver, Canada"
+    assert catonetworks.normalize_location_text("Toronto, CAN") == "Toronto, Canada"
+    assert catonetworks.normalize_location_text("Mexico City, MEX") == "Mexico City, Mexico"
+    assert catonetworks.normalize_location_text("Quito, ECUA") == "Quito, Ecuador"
 
 
 def test_checkpoint_normalization_keeps_pop_numbers_and_removes_footnotes(monkeypatch):
@@ -35,6 +44,17 @@ def test_checkpoint_normalization_keeps_pop_numbers_and_removes_footnotes(monkey
         checkpoint_geojson.normalize_location_text("New York 3, NY, USA(1)")
         == "New York 3, NY, USA"
     )
+
+
+def test_checkpoint_build_geocode_queries_strips_pop_numbers(monkeypatch):
+    checkpoint_geojson = import_provider_module(monkeypatch, "checkpoint_geojson")
+
+    assert checkpoint_geojson.build_geocode_queries("Ashburn 1, VA, USA") == [
+        "Ashburn, VA, United States"
+    ]
+    assert checkpoint_geojson.build_geocode_queries("London 3, UK") == [
+        "London, United Kingdom"
+    ]
 
 
 def test_cisco_uses_facility_name_before_falling_back_to_location(monkeypatch):
