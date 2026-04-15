@@ -1,6 +1,15 @@
 import pytest
 
 
+def test_public_ip_endpoints_use_icanhazip():
+    from provider_data.utils.update_proxy_endpoint import PUBLIC_IP_ENDPOINTS
+
+    assert PUBLIC_IP_ENDPOINTS == {
+        4: "https://ipv4.icanhazip.com/",
+        6: "https://ipv6.icanhazip.com/",
+    }
+
+
 def test_build_patch_payload_includes_ipv4_and_ipv6_cidrs():
     from provider_data.utils.update_proxy_endpoint import build_patch_payload
 

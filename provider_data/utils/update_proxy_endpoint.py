@@ -13,8 +13,8 @@ from provider_data.utils.http_config import http_request_kwargs
 
 PROXY_ENDPOINT_ID = "ad4ff330-62bb-4489-b6bb-f893806ebdde"
 PUBLIC_IP_ENDPOINTS = {
-    4: "https://api4.ipify.org",
-    6: "https://api6.ipify.org",
+    4: "https://ipv4.icanhazip.com/",
+    6: "https://ipv6.icanhazip.com/",
 }
 
 
