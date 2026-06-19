@@ -1,7 +1,6 @@
 #!/usr/bin/env -S uv run
 import argparse
 import csv
-import json
 import sys
 import time
 from io import StringIO
@@ -9,7 +8,9 @@ from urllib.parse import quote_plus
 
 import httpx
 from utils.base import convert_to_geojson
+from utils.geocoding import nominatim_get
 from utils.http_config import http_request_kwargs
+from utils.output import write_geojson_output
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
@@ -89,7 +90,7 @@ def get_data():
     for location in extract_location_rows(resp.text):
         query = location["geocode_query"]
         try:
-            req = httpx.get(
+            req = nominatim_get(
                 "https://nominatim.openstreetmap.org/search?q={}&format=jsonv2&polygon=1&addressdetails=1&limit=1&accept-language=en".format(
                     quote_plus(query)
                 ),
@@ -134,8 +135,7 @@ if __name__ == "__main__":
         geojson = convert_to_geojson(output)
         geojson_data = geojson_skeleton(geojson)
 
-        with open(f"output/{provider_name}.json", "w", encoding="utf-8") as f:
-            json.dump(geojson_data, f, ensure_ascii=False)
+        write_geojson_output(provider_name, geojson_data)
 
     write_and_post(
         provider_name,

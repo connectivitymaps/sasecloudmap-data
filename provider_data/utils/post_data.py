@@ -6,6 +6,7 @@ import httpx
 from dotenv import load_dotenv
 
 from provider_data.utils.http_config import http_request_kwargs
+from provider_data.utils.output import validate_geojson_output
 
 
 REQUEST_TIMEOUT = 30.0
@@ -31,6 +32,7 @@ def write_and_post(
     if update_dev:
         with open(f"output/{provider_name}.json") as f:
             payload["data"] = json.load(f)
+            validate_geojson_output(provider_name, payload["data"])
             dev = httpx.post(
                 f"{os.environ['DEV_HOSTNAME']}{provider_name}",
                 headers=headers,

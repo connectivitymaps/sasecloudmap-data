@@ -55,6 +55,13 @@ def test_build_provider_status_marks_snapshot_warning_as_ineligible():
     assert status["reasons"] == ["snapshot_warning"]
 
 
+def test_run_all_refresh_uses_single_worker():
+    from provider_data.run_all import max_workers_for_run
+
+    assert max_workers_for_run(refresh=True) == 1
+    assert max_workers_for_run(refresh=False) == 3
+
+
 def test_finalize_dev_update_uploads_carried_forward_snapshot_without_fresh_files(
     monkeypatch, tmp_path
 ):

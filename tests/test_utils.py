@@ -20,7 +20,16 @@ def write_output_file(tmp_path, provider_name, payload=None):
     output_dir.mkdir()
     with open(output_dir / f"{provider_name}.json", "w", encoding="utf-8") as file:
         json.dump(
-            {"type": "FeatureCollection", "features": []}
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": {"type": "Point", "coordinates": [0, 0]},
+                        "properties": {"city": "Test"},
+                    }
+                ],
+            }
             if payload is None
             else payload,
             file,
@@ -140,7 +149,7 @@ def test_run_provider_uses_current_python_interpreter(monkeypatch):
     ]
 
 
-def test_run_all_uses_three_workers_for_refresh(monkeypatch):
+def test_run_all_uses_single_worker_for_refresh(monkeypatch):
     from provider_data import run_all
 
     captured = {}
@@ -178,7 +187,7 @@ def test_run_all_uses_three_workers_for_refresh(monkeypatch):
         run_all.main()
 
     assert exc_info.value.code == 0
-    assert captured["max_workers"] == 3
+    assert captured["max_workers"] == 1
 
 
 def test_run_all_fails_at_end_when_fail_on_any_failure_is_enabled(monkeypatch):
@@ -220,6 +229,141 @@ def test_run_all_fails_at_end_when_fail_on_any_failure_is_enabled(monkeypatch):
         run_all.main()
 
     assert exc_info.value.code == 1
+
+
+def test_run_all_prompts_for_dev_sitemap_when_interactive(monkeypatch):
+    from provider_data import run_all
+
+    calls = []
+
+    class DummyFuture:
+        def result(self):
+            return True, None
+
+    class DummyExecutor:
+        def __init__(self, max_workers):
+            self.max_workers = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def submit(self, fn, *args):
+            return DummyFuture()
+
+    monkeypatch.setattr(
+        run_all,
+        "discover_providers",
+        lambda: [Path("provider_data/cloudflare_geojson.py")],
+    )
+    monkeypatch.setattr(run_all, "ThreadPoolExecutor", DummyExecutor)
+    monkeypatch.setattr(run_all, "as_completed", lambda futures: list(futures.keys()))
+    monkeypatch.setattr(run_all.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(run_all, "input", lambda prompt: "y")
+    monkeypatch.setattr(run_all, "run_sitemap", lambda target: calls.append(target))
+    monkeypatch.setattr(run_all.sys, "argv", ["run_all.py", "--dev"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_all.main()
+
+    assert exc_info.value.code == 0
+    assert calls == ["dev"]
+
+
+def test_run_all_generate_sitemap_option_runs_dev_and_prod_without_prompt(monkeypatch):
+    from provider_data import run_all
+
+    calls = []
+    prompts = []
+
+    class DummyFuture:
+        def result(self):
+            return True, None
+
+    class DummyExecutor:
+        def __init__(self, max_workers):
+            self.max_workers = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def submit(self, fn, *args):
+            return DummyFuture()
+
+    monkeypatch.setattr(
+        run_all,
+        "discover_providers",
+        lambda: [Path("provider_data/cloudflare_geojson.py")],
+    )
+    monkeypatch.setattr(run_all, "ThreadPoolExecutor", DummyExecutor)
+    monkeypatch.setattr(run_all, "as_completed", lambda futures: list(futures.keys()))
+    monkeypatch.setattr(run_all.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(run_all, "input", lambda prompt: prompts.append(prompt) or "n")
+    monkeypatch.setattr(run_all, "run_sitemap", lambda target: calls.append(target))
+    monkeypatch.setattr(
+        run_all.sys,
+        "argv",
+        ["run_all.py", "--dev", "--prod", "--generate-sitemap"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_all.main()
+
+    assert exc_info.value.code == 0
+    assert prompts == []
+    assert calls == ["dev", "prod"]
+
+
+def test_run_all_skip_sitemap_option_suppresses_interactive_prompt(monkeypatch):
+    from provider_data import run_all
+
+    calls = []
+    prompts = []
+
+    class DummyFuture:
+        def result(self):
+            return True, None
+
+    class DummyExecutor:
+        def __init__(self, max_workers):
+            self.max_workers = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def submit(self, fn, *args):
+            return DummyFuture()
+
+    monkeypatch.setattr(
+        run_all,
+        "discover_providers",
+        lambda: [Path("provider_data/cloudflare_geojson.py")],
+    )
+    monkeypatch.setattr(run_all, "ThreadPoolExecutor", DummyExecutor)
+    monkeypatch.setattr(run_all, "as_completed", lambda futures: list(futures.keys()))
+    monkeypatch.setattr(run_all.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(run_all, "input", lambda prompt: prompts.append(prompt) or "y")
+    monkeypatch.setattr(run_all, "run_sitemap", lambda target: calls.append(target))
+    monkeypatch.setattr(
+        run_all.sys,
+        "argv",
+        ["run_all.py", "--dev", "--skip-sitemap"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_all.main()
+
+    assert exc_info.value.code == 0
+    assert prompts == []
+    assert calls == []
 
 
 def test_run_all_provider_flag_accepts_declared_provider_name(monkeypatch, tmp_path):

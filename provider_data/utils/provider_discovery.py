@@ -81,9 +81,7 @@ def _build_provider_records(provider_dir: Path | None = None) -> list[dict[str, 
 
 def discover_expected_files(provider_dir: Path | None = None) -> set[str]:
     """Discover the output JSON files expected from the current provider scripts."""
-    return {
-        record["output_file"] for record in _build_provider_records(provider_dir)
-    }
+    return {record["output_file"] for record in _build_provider_records(provider_dir)}
 
 
 def discover_provider_records(provider_dir: Path | None = None) -> list[dict[str, str]]:

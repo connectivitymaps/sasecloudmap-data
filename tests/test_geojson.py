@@ -158,7 +158,7 @@ class TestGeoJSONValidation:
         assert any("out of range" in e for e in errors)
 
     def test_empty_features_is_valid(self):
-        """Test that empty features array is valid."""
+        """Test that an empty FeatureCollection is structurally valid GeoJSON."""
         valid = {"type": "FeatureCollection", "features": []}
         errors = validate_geojson_structure(valid)
         assert errors == []
@@ -202,9 +202,7 @@ class TestOutputFiles:
             if len(data.get("features", [])) == 0:
                 empty_files.append(filepath.name)
         if empty_files:
-            pytest.skip(
-                f"Files with no features (may be expected): {', '.join(empty_files)}"
-            )
+            pytest.fail(f"Files with no features: {', '.join(sorted(empty_files))}")
 
 
 class TestProviderScripts:

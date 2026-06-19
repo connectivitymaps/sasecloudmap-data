@@ -8,7 +8,9 @@ import time
 import httpx
 from provider_data.utils.base import convert_to_geojson as base_convert_to_geojson
 from provider_data.utils.browser_rendering import extract_json, extract_markdown
+from provider_data.utils.geocoding import nominatim_get
 from provider_data.utils.http_config import http_request_kwargs
+from provider_data.utils.output import write_geojson_output
 from provider_data.utils.post_data import write_and_post
 from provider_data.utils.skeleton import geojson_skeleton
 
@@ -181,7 +183,7 @@ def get_data():
         city = row["city"]
         country = row["country"]
         try:
-            geolocation = httpx.get(
+            geolocation = nominatim_get(
                 f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&accept-language=en&q={city},{country}",
                 **http_request_kwargs(),
             )
@@ -229,8 +231,7 @@ if __name__ == "__main__":
         geojson = convert_to_geojson(output)
         geojson_data = geojson_skeleton(geojson)
 
-        with open(f"output/{provider_name}.json", "w", encoding="utf-8") as f:
-            json.dump(geojson_data, f, ensure_ascii=False)
+        write_geojson_output(provider_name, geojson_data)
 
     write_and_post(
         provider_name,

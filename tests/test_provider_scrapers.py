@@ -27,9 +27,14 @@ def test_cato_prefers_serviced_through_geo_location(monkeypatch):
 def test_cato_normalizes_known_city_and_country_aliases(monkeypatch):
     catonetworks = import_provider_module(monkeypatch, "catonetworks")
 
-    assert catonetworks.normalize_location_text("Vancourver, CAN") == "Vancouver, Canada"
+    assert (
+        catonetworks.normalize_location_text("Vancourver, CAN") == "Vancouver, Canada"
+    )
     assert catonetworks.normalize_location_text("Toronto, CAN") == "Toronto, Canada"
-    assert catonetworks.normalize_location_text("Mexico City, MEX") == "Mexico City, Mexico"
+    assert (
+        catonetworks.normalize_location_text("Mexico City, MEX")
+        == "Mexico City, Mexico"
+    )
     assert catonetworks.normalize_location_text("Quito, ECUA") == "Quito, Ecuador"
 
 
@@ -82,6 +87,48 @@ def test_fortinet_keeps_multiple_facilities_for_same_airport_code(monkeypatch):
     assert fortinet_geojson.extract_location_rows(html) == [
         {"name": "Dubai - United Arab Emirates (DXB-F1)", "airport_code": "DXB"},
         {"name": "Dubai - United Arab Emirates (DXB-F2)", "airport_code": "DXB"},
+    ]
+
+
+def test_fortinet_extracts_rows_when_location_and_code_are_separate_columns(
+    monkeypatch,
+):
+    fortinet_geojson = import_provider_module(monkeypatch, "fortinet_geojson")
+
+    html = """
+    <div id="mc-main-content">
+      <table>
+        <thead>
+          <tr>
+            <th>Cloud Location</th>
+            <th>Code</th>
+            <th>Analytics location Availability</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Fortinet</td>
+            <td>Ashburn, Virginia (United States)</td>
+            <td><p>IAD-F5</p></td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td>Fortinet</td>
+            <td>Dubai (United Arab Emirates) To comply with UAE regulations</td>
+            <td><p>DXB-F2</p></td>
+            <td>Yes</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    """
+
+    assert fortinet_geojson.extract_location_rows(html) == [
+        {
+            "name": "Ashburn, Virginia (United States) (IAD-F5)",
+            "airport_code": "IAD",
+        },
+        {"name": "Dubai (United Arab Emirates) (DXB-F2)", "airport_code": "DXB"},
     ]
 
 

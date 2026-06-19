@@ -1,13 +1,14 @@
 #!/usr/bin/env -S uv run
 import argparse
-import json
 import re
 import sys
 import time
 
 import httpx
 from bs4 import BeautifulSoup
+from utils.geocoding import nominatim_get
 from utils.http_config import http_request_kwargs
+from utils.output import write_geojson_output
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
@@ -53,7 +54,7 @@ def resolve_locations(airport_codes):
             )
         if geometry is None:
             try:
-                fallback_geolocation = httpx.get(
+                fallback_geolocation = nominatim_get(
                     f"https://nominatim.openstreetmap.org/search?format=geojson&polygon=1&addressdetails=1&limit=1&accept-language=en&q={code}+airport",
                     **http_request_kwargs(),
                 )
@@ -80,6 +81,7 @@ def resolve_locations(airport_codes):
 
 
 def normalize_location_text(location_text: str) -> str:
+    location_text = re.sub(r"\s+To comply\b.*$", "", location_text).strip()
     match = re.search(r".*\([A-Z]{3}-[A-Z0-9]+\)", location_text)
     if match:
         return match.group(0).strip()
@@ -104,6 +106,26 @@ def extract_location_rows(html: str) -> list[dict[str, str]]:
         match = re.search(r"\(([A-Z]{3})-[A-Z0-9]+\)", location_text)
         if match:
             rows.append({"name": location_text, "airport_code": match.group(1)})
+    if rows:
+        return rows
+
+    for row in content.find_all("tr"):
+        cells = [cell.get_text(" ", strip=True) for cell in row.find_all("td")]
+        if len(cells) < 3:
+            continue
+
+        location_text = normalize_location_text(cells[1])
+        code_match = re.search(r"\b([A-Z]{3})-[A-Z0-9]+\b", cells[2])
+        if not location_text or code_match is None:
+            continue
+
+        code = code_match.group(0)
+        rows.append(
+            {
+                "name": f"{location_text} ({code})",
+                "airport_code": code_match.group(1),
+            }
+        )
     return rows
 
 
@@ -138,8 +160,7 @@ if __name__ == "__main__":
         to_geosjon = convert_to_geojson(geojson)
         geojson_data = geojson_skeleton(to_geosjon)
 
-        with open(f"output/{provider_name}.json", "w", encoding="utf-8") as f:
-            json.dump(geojson_data, f, ensure_ascii=False)
+        write_geojson_output(provider_name, geojson_data)
 
     write_and_post(
         provider_name,

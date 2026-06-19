@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from builtins import input
 from pathlib import Path
 
 from provider_data.utils.provider_discovery import (
@@ -58,6 +59,13 @@ def discover_providers() -> list[Path]:
     return discover_provider_scripts(Path(__file__).parent)
 
 
+def max_workers_for_run(refresh: bool) -> int:
+    """Return worker count for provider fan-out."""
+    if refresh:
+        return 1
+    return 3
+
+
 def run_provider(
     script_path: Path, refresh: bool, dev: bool, prod: bool
 ) -> tuple[bool, str]:
@@ -104,6 +112,41 @@ def remove_failed_refresh_output(script_path: Path) -> Path | None:
     return output_path
 
 
+def sitemap_targets(dev: bool, prod: bool) -> list[str]:
+    """Return sitemap environments requested by provider update flags."""
+    targets = []
+    if dev:
+        targets.append("dev")
+    if prod:
+        targets.append("prod")
+    return targets
+
+
+def run_sitemap(target: str) -> None:
+    """Run sitemap generation for a single environment."""
+    script_path = Path(__file__).parent / "utils" / "generate_sitemap.py"
+    subprocess.run(
+        [sys.executable, str(script_path), f"--{target}"],
+        check=True,
+        cwd=script_path.parent.parent.parent,
+    )
+
+
+def should_generate_sitemap(args: argparse.Namespace, targets: list[str]) -> bool:
+    """Decide whether to generate sitemap after provider processing."""
+    if not targets or args.skip_sitemap:
+        return False
+    if args.generate_sitemap:
+        return True
+    if not sys.stdin.isatty():
+        print("Skipping sitemap generation in non-interactive mode.")
+        return False
+
+    target_text = " and ".join(targets)
+    answer = input(f"Generate sitemap for {target_text}? [y/N] ")
+    return answer.strip().lower() in {"y", "yes"}
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Run all provider scripts with graceful failure handling."
@@ -128,6 +171,17 @@ def main():
         action="store_true",
         help="Exit with error code after processing all providers if any failed",
     )
+    sitemap_group = parser.add_mutually_exclusive_group()
+    sitemap_group.add_argument(
+        "--generate-sitemap",
+        action="store_true",
+        help="Generate sitemap for --dev and/or --prod without prompting",
+    )
+    sitemap_group.add_argument(
+        "--skip-sitemap",
+        action="store_true",
+        help="Do not prompt for or generate sitemap",
+    )
 
     args = parser.parse_args()
 
@@ -148,9 +202,9 @@ def main():
 
     results = {"success": [], "failed": []}
 
-    # Use a small fixed worker pool so refreshes can parallelize without overwhelming
-    # shared geocoding APIs as aggressively as an unrestricted fan-out would.
-    max_workers = 3
+    # Refreshes may perform bulk geocoding; keep those single-threaded across
+    # providers so their per-script throttling is not defeated by fan-out.
+    max_workers = max_workers_for_run(args.refresh)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(
@@ -204,6 +258,12 @@ def main():
     if results["failed"] and args.fail_on_any_failure:
         print("\n💥 Completed with provider failures (exit 1)")
         sys.exit(1)
+
+    targets = sitemap_targets(args.dev, args.prod)
+    if should_generate_sitemap(args, targets):
+        for target in targets:
+            print(f"\n🗺️ Generating {target} sitemap")
+            run_sitemap(target)
 
     # Always exit 0 unless fail-fast or fail-on-any-failure is enabled.
     # This allows the CI pipeline to continue even with partial failures.

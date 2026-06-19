@@ -251,7 +251,11 @@ def test_forcepoint_get_data_converts_nominatim_coordinates_to_lat_lon(monkeypat
         "get_forcepoint_location_rows",
         lambda: [{"country": "Australia", "city": "Sydney"}],
     )
-    monkeypatch.setattr(forcepoint_geojson.httpx, "get", lambda url: DummyResponse())
+    monkeypatch.setattr(
+        forcepoint_geojson,
+        "nominatim_get",
+        lambda url, **kwargs: DummyResponse(),
+    )
     monkeypatch.setattr(forcepoint_geojson.time, "sleep", lambda _: None)
 
     data = forcepoint_geojson.get_data()

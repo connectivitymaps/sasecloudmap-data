@@ -1,12 +1,12 @@
 #!/usr/bin/env -S uv run
 import argparse
-import json
 import re
 import sys
 
 import httpx
 from utils.base import convert_to_geojson
 from utils.http_config import http_request_kwargs
+from utils.output import write_geojson_output
 from utils.post_data import write_and_post
 from utils.skeleton import geojson_skeleton
 
@@ -83,8 +83,7 @@ if __name__ == "__main__":
         cloudflare_jd_data = get_jdcloud_data()
         geojson = convert_to_geojson([*cloudflare_data, *cloudflare_jd_data])
         geojson_data = geojson_skeleton(geojson)
-        with open(f"output/{provider_name}.json", "w", encoding="utf-8") as f:
-            json.dump(geojson_data, f, ensure_ascii=False)
+        write_geojson_output(provider_name, geojson_data)
 
     write_and_post(
         provider_name,
