@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from provider_data.utils.http_config import http_request_kwargs
 
 DEFAULT_TIMEOUT = 60.0
-DEFAULT_MODEL = "workers-ai/@cf/moonshotai/kimi-k2.5"
+DEFAULT_MODEL = "workers-ai/@cf/zai-org/glm-5.2"
 
 
 def extract_json(

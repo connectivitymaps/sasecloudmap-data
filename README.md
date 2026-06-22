@@ -37,7 +37,7 @@ uv run pytest tests/ -v
 - `provider_data/utils/browser_rendering.py` wraps Cloudflare Browser Rendering quick actions for reusable scraping flows
 - `provider_data/forcepoint_geojson.py` now uses Browser Rendering `/json` first, with a markdown fallback
 - `BROWSER_RENDERING_API_TOKEN` is optional and falls back to `CLOUDFLARE_API_TOKEN`
-- `BROWSER_RENDERING_JSON_MODEL` defaults to `workers-ai/@cf/moonshotai/kimi-k2.5`
+- `BROWSER_RENDERING_JSON_MODEL` defaults to `workers-ai/@cf/zai-org/glm-5.2`
 - `CLOUDFLARE_ACCOUNT_ID` and `R2_ACCOUNT_ID` should be bare account IDs, without a trailing `/`
 - `EXTRA_CA_CERT_FILE` optionally adds a local corporate CA for Python HTTPS requests
 - `RELAX_X509_STRICT=1` is a separate local-only escape hatch for OpenSSL 3 certificate strictness issues
