@@ -1,157 +1,71 @@
-# AGENTS.md (CLAUDE.md)
+# AGENTS.md
 
-## Project Overview
+## Purpose
 
-This repository collects and transforms SASE/CDN provider datacenter location data into GeoJSON format for display on [sasecloudmap.com](https://sasecloudmap.com/). Each provider script scrapes location data from public sources, geocodes it, and pushes it to dev/prod environments via API.
+This app fetches SASE provider location data, converts it to GeoJSON, writes `output/<provider>.json`, and posts it to the `sasecloudmap` Worker API.
 
-## Tech Stack
+Use `uv` for all Python commands. Do not use ambient `python`, `pip`, or global tools.
 
-- **Python 3.13+** with **uv** for package management
-- **httpx** - HTTP client for API requests
-- **BeautifulSoup4** - HTML parsing for scraping provider docs
-- **Cloudflare Browser Rendering** - Render dynamic pages and extract markdown/structured data
-- **python-dotenv** - Environment variable management
-- **ruff** - Linting and formatting
+## Important Files
 
-## Repository Structure
+- `provider_data/*_geojson.py`: one provider script per vendor.
+- `provider_data/utils/base.py`: shared GeoJSON conversion for simple `{name, coordinates}` provider data.
+- `provider_data/utils/output.py`: validates and atomically writes generated GeoJSON. Do not bypass it.
+- `provider_data/utils/post_data.py`: posts dev/prod payloads to the frontend Worker.
+- `provider_data/run_all.py`: local batch runner. `--refresh` runs one provider at a time to respect geocoder throttling.
+- `provider_data/utils/provider_discovery.py`: source of truth for workflow provider discovery.
+- `.github/workflows/update_dev_unified.yaml`: CI refreshes individual provider scripts, validates output, deploys eligible outputs to dev, then generates the dev sitemap.
+- `.github/workflows/update_main.yaml`: production workflow posts from dev to prod. Do not touch prod behavior unless asked.
 
-```
-provider-data/
-├── provider_data/           # Main package
-│   ├── *.py                 # Provider scripts (one per SASE vendor)
-│   ├── run_all.py           # Batch runner for all providers
-│   └── utils/
-│       ├── post_data.py     # API posting helper
-│       ├── browser_rendering.py # Cloudflare Browser Rendering helper
-│       ├── skeleton.py      # GeoJSON skeleton generator
-│       ├── generate_sitemap.py  # Sitemap generation utility
-│       └── upload_to_r2.py  # R2 historical snapshot uploader
-├── tests/                   # GeoJSON validation tests
-├── output/                  # Generated JSON files (gitignored)
-├── .github/workflows/       # CI: auto-update dev/prod on schedule
-├── pyproject.toml           # Project dependencies
-└── .env                     # Environment config (not committed)
-```
+## Provider Script Contract
 
-## Provider Scripts Pattern
+Each provider script should keep this shape:
 
-Each `provider_data/*.py` script follows this structure:
+- literal top-level `provider_name`, `friendly_name`, and `app_type`
+- CLI flags `--refresh`, `--dev`, `--prod`
+- `--refresh` fetches source data and writes `output/<provider_name>.json`
+- `--dev` posts local output to `DEV_HOSTNAME`
+- `--prod` reads the current dev API data and posts it to `PROD_HOSTNAME`
 
-1. **`get_data()`** - Fetches raw location data from provider's public source
-2. **`convert_to_geojson(data)`** - Transforms data to GeoJSON features
-3. **CLI interface** with `--refresh`, `--dev`, `--prod` flags
-4. Uses `utils.skeleton.geojson_skeleton()` to wrap features
-5. Uses `utils.post_data.write_and_post()` to push to environments
+Generated output must be:
 
-## Key Commands
+- GeoJSON `FeatureCollection`
+- Point features with coordinates in `[longitude, latitude]` order
+- non-empty when written or posted
+- backward-compatible with current frontend consumers unless `sasecloudmap` is changed in the same task
 
-```bash
-# Setup
-source .venv/bin/activate
-cp .env.example .env  # Then fill in credentials
+## GeoJSON Property Contract
 
-# Refresh data from sources
+Current frontend code depends on `properties.city`.
+
+If changing output properties:
+
+- keep `city` populated during rollout, or update frontend fallbacks at the same time
+- preserve Cloudflare route lookup behavior in `../sasecloudmap/src/connectionRoute.js`
+- update comparison behavior in `../sasecloudmap/src/tableData.js` when grouping keys change
+- add or update tests in both apps
+
+For location comparison normalization, prefer deterministic coordinate-based behavior. Do not add LLM normalization, broad alias tables, or fuzzy string matching as the primary matching mechanism.
+
+See `docs/location-comparison-normalization-prd.md` before changing comparison-facing GeoJSON fields.
+
+## Commands
+
+```shell
+uv sync --all-extras --dev
 uv run provider_data/<provider>.py --refresh
-
-# Push to dev environment
-uv run provider_data/<provider>.py --dev
-
-# Push to prod environment
-uv run provider_data/<provider>.py --prod
-
-# Batch operations (recommended)
-uv run provider_data/run_all.py --refresh --dev
-
-# Run tests
-uv run pytest tests/ -v
-
-# Linting
-uv run ruff check --fix
-uv run ruff format
+uv run provider_data/run_all.py --refresh --fail-on-any-failure
+uv run pytest tests/ -q
+uv run ruff check .
+uv run ruff format --check .
 ```
 
-## Environment Variables
+Use `--dev` only when the task requires posting to staging/dev. Use `--prod` only when explicitly requested.
 
-Required in `.env`:
-- `AUTH` - API authentication token
-- `BMS` - Additional auth header
-- `DEV_HOSTNAME` - Dev API endpoint (e.g., `https://dev.example.com/add`)
-- `PROD_HOSTNAME` - Prod API endpoint
-- `CLOUDFLARE_ACCOUNT_ID` - Cloudflare account ID
-- `CLOUDFLARE_API_TOKEN` - Cloudflare API token (used as fallback for Browser Rendering)
-- `CLOUDFLARE_ZONE_ID` - For cache purging
-- `CACHE_PURGE_KEY` - Cloudflare API token for cache operations
-- `BROWSER_RENDERING_API_TOKEN` - Optional Cloudflare API token with `Browser Rendering - Edit` permission
-- `BROWSER_RENDERING_JSON_MODEL` - Optional Browser Rendering JSON extraction model override
-- `R2_ACCOUNT_ID` - Cloudflare account ID (for R2 snapshots)
-- `R2_ACCESS_KEY_ID` - R2 API token access key ID
-- `R2_SECRET_ACCESS_KEY` - R2 API token secret access key
-- `R2_BUCKET_NAME` - R2 bucket name for historical snapshots
+## Safety Rules
 
-## Current Providers
-
-| Provider | Script | Data Source |
-|----------|--------|-------------|
-| Cloudflare | `cloudflare_geojson.py` | speed.cloudflare.com API |
-| Zscaler | `zscaler_geojson.py` | config.zscaler.com API |
-| Netskope | `netskope_geojson.py` | trust.netskope.com API |
-| Palo Alto | `paloalto_geojson.py` | docs.paloaltonetworks.com (HTML scrape) |
-| Fortinet | `fortinet_geojson.py` | docs.fortinet.com (HTML scrape) |
-| Check Point | `checkpoint_geojson.py` | sc1.checkpoint.com (HTML scrape) |
-| Cisco Umbrella | `cisco_umbrella_geojson.py` | umbrella.cisco.com (HTML scrape) |
-| Cato Networks | `catonetworks.py` | support.catonetworks.com (CSV) |
-| iboss | `iboss_geojson.py` | status.iboss.com API |
-| Forcepoint | `forcepoint_geojson.py` | support.forcepoint.com (Browser Rendering `/json` with markdown fallback) |
-
-## Adding a New Provider
-
-1. Create `provider_data/<provider>_geojson.py`
-2. Implement `get_data()` to fetch locations from source
-3. Implement `convert_to_geojson(data)` following existing pattern
-4. Add standard CLI with `--refresh`, `--dev`, `--prod` flags
-5. Set `provider_name`, `friendly_name`, `app_type` variables
-6. Test with `--refresh` then `--dev`
-
-## GeoJSON Output Format
-
-```json
-{
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "Point",
-        "coordinates": [longitude, latitude]
-      },
-      "properties": {
-        "city": "Location Name"
-      }
-    }
-  ]
-}
-```
-
-## CI/CD
-
-- **update_dev_unified.yaml** - Runs on push to main + weekly schedule (Monday 18:00 UTC)
-- **update_main.yaml** - Production deployment workflow
-- Uses `run_all.py` for batch updates with graceful failure handling
-- Runs GeoJSON validation tests after updates
-- Generates sitemap and purges Cloudflare cache
-- Uploads historical GeoJSON snapshots to Cloudflare R2 (timestamp-prefixed)
-
-## Common Geocoding Services Used
-
-- **nominatim.openstreetmap.org** - Primary geocoding for city names
-- **iata.clumsy.dev** - Airport code to coordinates lookup
-- **ipinfo.io** - IP geolocation (for Cloudflare China IPs)
-
-## Notes for AI Agents
-
-- Scripts are executable via shebang: `#!/usr/bin/env -S uv run`
-- Coordinate order varies: some sources use `[lat, lon]`, output is always `[lon, lat]` for GeoJSON
-- Many scripts use deduplication: `[i for n, i in enumerate(x) if i not in x[n+1:]]`
-- Error handling catches HTTP and parsing errors, logs failures but continues
-- Nominatim rate limiting (1 req/sec) is implemented in all provider scripts
-- Cloudflare account IDs in `.env` should be bare IDs, without trailing `/`
+- Never commit `.env`, tokens, provider credentials, R2 keys, or workflow secrets.
+- Keep `output/` generated. Edit provider scripts or shared utilities, not generated JSON, unless the user explicitly asks for a one-off local artifact.
+- Do not relax empty-output protections in `provider_data/utils/output.py` or `provider_data/utils/post_data.py`.
+- If a provider source or parser changed, reproduce with the single provider first, then run the narrow tests.
+- If the change affects workflows, update `tests/test_workflow_ci.py`.
