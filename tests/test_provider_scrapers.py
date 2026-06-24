@@ -257,3 +257,34 @@ def test_paloalto_finds_locations_table_without_brittle_generated_id(monkeypatch
         "Tokyo, Japan",
         "Osaka, Japan",
     ]
+
+
+def test_paloalto_skips_country_only_location_labels(monkeypatch):
+    paloalto_geojson = import_provider_module(monkeypatch, "paloalto_geojson")
+
+    html = """
+    <html>
+      <body>
+        <table>
+          <thead>
+            <tr>
+              <th>Compute Location</th>
+              <th>Prisma Access Location</th>
+              <th>City and Country</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Europe</td>
+              <td>Netherlands</td>
+              <td>Amsterdam, Netherlands\n, Netherlands</td>
+            </tr>
+          </tbody>
+        </table>
+      </body>
+    </html>
+    """
+
+    assert paloalto_geojson.extract_paloalto_locations(html) == [
+        "Amsterdam, Netherlands",
+    ]

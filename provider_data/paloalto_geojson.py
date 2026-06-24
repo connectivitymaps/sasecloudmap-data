@@ -44,7 +44,9 @@ def extract_paloalto_locations(html: str) -> list[str]:
         if len(cells) < 3:
             continue
         cities = cells[2].get_text(separator="\n", strip=True).split("\n")
-        processed_locations.extend(city for city in cities if city)
+        processed_locations.extend(
+            city for city in cities if city and not city.startswith(",")
+        )
     return list(dict.fromkeys(processed_locations))
 
 
