@@ -1,6 +1,25 @@
 """Base utilities for provider scripts."""
 
 
+def location_from_nominatim_result(result: dict, fallback_name: str) -> dict:
+    address = result.get("address") or {}
+    name = (
+        address.get("city")
+        or address.get("town")
+        or address.get("municipality")
+        or address.get("village")
+        or fallback_name
+    )
+    location = {
+        "name": name,
+        "coordinates": [result["lat"], result["lon"]],
+    }
+    country_code = address.get("country_code")
+    if country_code:
+        location["countryCode"] = country_code.upper()
+    return location
+
+
 def convert_to_geojson(data: list[dict]) -> list[dict]:
     """Convert location data to GeoJSON features.
 

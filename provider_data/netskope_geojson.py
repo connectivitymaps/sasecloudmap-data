@@ -28,11 +28,13 @@ def get_data():
             seen.add(location_key)
             locations.append(
                 {
-                    "name": loc["name"],
+                    "name": loc["city"],
                     "coordinates": [
                         loc["latitude"],
                         loc["longitude"],
                     ],
+                    "countryCode": loc.get("country_code"),
+                    "siteCode": loc["name"],
                 }
             )
 

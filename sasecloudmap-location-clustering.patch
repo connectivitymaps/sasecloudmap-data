@@ -1,0 +1,179 @@
+--- a/src/tableData.js
++++ b/src/tableData.js
+@@ -6,6 +6,48 @@
+   return properties.city || properties.address?.city || properties.name || 'N/A'
+ }
+ 
++const LOCATION_CLUSTER_RADIUS_KM = 50
++
++function getPointCoordinates(feature) {
++  const coordinates = feature?.geometry?.type === 'Point' ? feature.geometry.coordinates : null
++  if (!Array.isArray(coordinates) || coordinates.length < 2) {
++    return null
++  }
++  const [longitude, latitude] = coordinates
++  return Number.isFinite(longitude) && Number.isFinite(latitude) ? [longitude, latitude] : null
++}
++
++function distanceKm([longitudeA, latitudeA], [longitudeB, latitudeB]) {
++  const toRadians = (degrees) => (degrees * Math.PI) / 180
++  const deltaLatitude = toRadians(latitudeB - latitudeA)
++  const deltaLongitude = toRadians(longitudeB - longitudeA)
++  const a =
++    Math.sin(deltaLatitude / 2) ** 2 +
++    Math.cos(toRadians(latitudeA)) * Math.cos(toRadians(latitudeB)) * Math.sin(deltaLongitude / 2) ** 2
++  return 6371.0088 * 2 * Math.asin(Math.sqrt(a))
++}
++
++function countriesCanCluster(a, b) {
++  return !a.countryCode || !b.countryCode || a.countryCode === b.countryCode
++}
++
++function rowsCanCluster(a, b) {
++  if (a.coordinates && b.coordinates) {
++    return countriesCanCluster(a, b) && distanceKm(a.coordinates, b.coordinates) <= LOCATION_CLUSTER_RADIUS_KM
++  }
++  return !a.coordinates && !b.coordinates && a.city === b.city && countriesCanCluster(a, b)
++}
++
++function isCodeLikeLabel(label) {
++  return /^[A-Z0-9]{3,}$/.test(label) || /\d$/.test(label)
++}
++
++function getClusterLabel(rows) {
++  return rows
++    .map(({ city }) => city)
++    .sort((a, b) => Number(isCodeLikeLabel(a)) - Number(isCodeLikeLabel(b)) || a.length - b.length || a.localeCompare(b))[0]
++}
++
+ export function normalizeProviders(providers) {
+   return providers.map((provider) => ({
+     name: provider.name,
+@@ -26,28 +68,39 @@
+     provider: provider.label || getProviderLabel(provider),
+     providerKey: provider.name,
+     city: getCity(feature.properties),
++    countryCode: feature.properties?.countryCode,
++    coordinates: getPointCoordinates(feature),
+   }))
+ }
+ 
+ export function buildComparisonMatrix(rows, selectedProviders) {
+   const selectedProviderKeys = new Set(selectedProviders.map(({ name }) => name))
+-  const locations = new Map()
++  const clusters = []
+ 
+-  rows.forEach(({ providerKey, city }) => {
+-    if (!selectedProviderKeys.has(providerKey)) {
++  rows.forEach((row) => {
++    if (!selectedProviderKeys.has(row.providerKey)) {
+       return
+     }
+ 
+-    if (!locations.has(city)) {
+-      locations.set(city, new Set())
++    const cluster = clusters.find((cluster) => cluster.rows.some((clusterRow) => rowsCanCluster(clusterRow, row)))
++    if (cluster) {
++      cluster.rows.push(row)
++    } else {
++      clusters.push({ rows: [row] })
+     }
+-    locations.get(city).add(providerKey)
+   })
+ 
+-  return Array.from(locations.entries())
+-    .sort(([locationA], [locationB]) => locationA.localeCompare(locationB, undefined, { sensitivity: 'base' }))
+-    .map(([city, providerKeys]) => ({
++  return clusters
++    .map(({ rows }) => {
++      const providerKeys = new Set(rows.map(({ providerKey }) => providerKey))
++      return {
++        city: getClusterLabel(rows),
++        providerKeys: selectedProviders.filter(({ name }) => providerKeys.has(name)).map(({ name }) => name),
++      }
++    })
++    .sort(({ city: locationA }, { city: locationB }) => locationA.localeCompare(locationB, undefined, { sensitivity: 'base' }))
++    .map(({ city, providerKeys }) => ({
+       city,
+-      providerKeys: selectedProviders.filter(({ name }) => providerKeys.has(name)).map(({ name }) => name),
++      providerKeys,
+     }))
+ }
+--- a/src/tableData.test.ts
++++ b/src/tableData.test.ts
+@@ -13,21 +13,21 @@
+   ])
+ })
+ 
+-test('extractComparisonRows uses friendly names and city fallbacks', () => {
++test('extractComparisonRows uses friendly names, city fallbacks, and point metadata', () => {
+   const provider = { name: 'cloudflare', friendlyName: 'Cloudflare' }
+   const data = {
+     type: 'FeatureCollection',
+     features: [
+-      { properties: { city: 'Lisbon' } },
++      { properties: { city: 'Lisbon', countryCode: 'PT' }, geometry: { type: 'Point', coordinates: [-9.1427, 38.7369] } },
+       { properties: { address: { city: 'Frankfurt' } } },
+       { properties: { name: 'Unnamed PoP' } },
+     ],
+   }
+ 
+   assert.deepEqual(extractComparisonRows(data, provider), [
+-    { provider: 'Cloudflare', providerKey: 'cloudflare', city: 'Lisbon' },
+-    { provider: 'Cloudflare', providerKey: 'cloudflare', city: 'Frankfurt' },
+-    { provider: 'Cloudflare', providerKey: 'cloudflare', city: 'Unnamed PoP' },
++    { provider: 'Cloudflare', providerKey: 'cloudflare', city: 'Lisbon', countryCode: 'PT', coordinates: [-9.1427, 38.7369] },
++    { provider: 'Cloudflare', providerKey: 'cloudflare', city: 'Frankfurt', countryCode: undefined, coordinates: null },
++    { provider: 'Cloudflare', providerKey: 'cloudflare', city: 'Unnamed PoP', countryCode: undefined, coordinates: null },
+   ])
+ })
+ 
+@@ -36,24 +36,38 @@
+   assert.equal(isProviderSelectedByDefault('zscaler'), false)
+ })
+ 
+-test('buildComparisonMatrix pivots selected providers by exact city', () => {
++test('buildComparisonMatrix clusters nearby provider locations by coordinates', () => {
+   const rows = [
+-    { provider: 'Cloudflare', providerKey: 'cloudflare', city: 'Zurich' },
+-    { provider: 'Cloudflare', providerKey: 'cloudflare', city: 'Amsterdam' },
+-    { provider: 'Cloudflare', providerKey: 'cloudflare', city: 'Amsterdam' },
+-    { provider: 'Zscaler', providerKey: 'zscaler', city: 'amsterdam' },
+-    { provider: 'Zscaler', providerKey: 'zscaler', city: 'Berlin' },
+-    { provider: 'Netskope', providerKey: 'netskope', city: 'Paris' },
++    { provider: 'Cloudflare', providerKey: 'cloudflare', city: 'Zurich', countryCode: 'CH', coordinates: [8.5492, 47.4647] },
++    { provider: 'Cloudflare', providerKey: 'cloudflare', city: 'Zurich', countryCode: 'CH', coordinates: [8.5492, 47.4647] },
++    { provider: 'Zscaler', providerKey: 'zscaler', city: 'Zurich', countryCode: undefined, coordinates: [8.5417, 47.3769] },
++    { provider: 'Netskope', providerKey: 'netskope', city: 'ZUR1', countryCode: 'CH', coordinates: [8.553, 47.4611] },
++    { provider: 'Zscaler', providerKey: 'zscaler', city: 'Berlin', countryCode: undefined, coordinates: [13.405, 52.52] },
+   ]
+   const selectedProviders = [
+     { name: 'cloudflare', label: 'Cloudflare' },
+     { name: 'zscaler', label: 'Zscaler' },
++    { name: 'netskope', label: 'Netskope' },
+   ]
+ 
+   assert.deepEqual(buildComparisonMatrix(rows, selectedProviders), [
+-    { city: 'Amsterdam', providerKeys: ['cloudflare'] },
+-    { city: 'amsterdam', providerKeys: ['zscaler'] },
+     { city: 'Berlin', providerKeys: ['zscaler'] },
+-    { city: 'Zurich', providerKeys: ['cloudflare'] },
++    { city: 'Zurich', providerKeys: ['cloudflare', 'zscaler', 'netskope'] },
++  ])
++})
++
++test('buildComparisonMatrix keeps same labels in different countries separate', () => {
++  const rows = [
++    { provider: 'Provider A', providerKey: 'a', city: 'Springfield', countryCode: 'US', coordinates: [-89.6501, 39.7817] },
++    { provider: 'Provider B', providerKey: 'b', city: 'Springfield', countryCode: 'AU', coordinates: [152.489, -27.653] },
++  ]
++  const selectedProviders = [
++    { name: 'a', label: 'Provider A' },
++    { name: 'b', label: 'Provider B' },
++  ]
++
++  assert.deepEqual(buildComparisonMatrix(rows, selectedProviders), [
++    { city: 'Springfield', providerKeys: ['a'] },
++    { city: 'Springfield', providerKeys: ['b'] },
+   ])
+ })

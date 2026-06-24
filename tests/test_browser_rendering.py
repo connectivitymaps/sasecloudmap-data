@@ -7,9 +7,7 @@ def test_browser_rendering_json_request_uses_account_id(monkeypatch):
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "acct-123")
     monkeypatch.setenv("BROWSER_RENDERING_API_TOKEN", "")
     monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "token-123")
-    monkeypatch.setenv(
-        "BROWSER_RENDERING_JSON_MODEL", "workers-ai/@cf/zai-org/glm-5.2"
-    )
+    monkeypatch.setenv("BROWSER_RENDERING_JSON_MODEL", "workers-ai/@cf/zai-org/glm-5.2")
 
     captured = {}
 

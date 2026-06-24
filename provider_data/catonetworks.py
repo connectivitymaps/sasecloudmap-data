@@ -7,7 +7,7 @@ from io import StringIO
 from urllib.parse import quote_plus
 
 import httpx
-from utils.base import convert_to_geojson
+from utils.base import convert_to_geojson, location_from_nominatim_result
 from utils.geocoding import nominatim_get
 from utils.http_config import http_request_kwargs
 from utils.output import write_geojson_output
@@ -99,10 +99,7 @@ def get_data():
             req.raise_for_status()
             data = req.json()
             locations.append(
-                {
-                    "name": location["display_name"],
-                    "coordinates": [data[0]["lat"], data[0]["lon"]],
-                }
+                location_from_nominatim_result(data[0], location["display_name"])
             )
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
             print(f"HTTP error for location {query}: {e}")

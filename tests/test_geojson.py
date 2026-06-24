@@ -242,6 +242,40 @@ def test_convert_to_geojson():
     assert result[0]["properties"]["city"] == "Test City"
 
 
+def test_location_from_nominatim_result_prefers_address_city_and_country_code():
+    from provider_data.utils.base import location_from_nominatim_result
+
+    result = location_from_nominatim_result(
+        {
+            "lat": "47.3744",
+            "lon": "8.541",
+            "name": "Zürich",
+            "address": {"city": "Zurich", "country_code": "ch"},
+        },
+        fallback_name="Zurich 1, Switzerland",
+    )
+
+    assert result == {
+        "name": "Zurich",
+        "coordinates": ["47.3744", "8.541"],
+        "countryCode": "CH",
+    }
+
+
+def test_location_from_nominatim_result_falls_back_to_provider_label():
+    from provider_data.utils.base import location_from_nominatim_result
+
+    result = location_from_nominatim_result(
+        {"lat": "47.3744", "lon": "8.541", "name": "Zürich", "address": {}},
+        fallback_name="Zurich 1, Switzerland",
+    )
+
+    assert result == {
+        "name": "Zurich 1, Switzerland",
+        "coordinates": ["47.3744", "8.541"],
+    }
+
+
 def test_deduplicate():
     """Test the deduplicate utility function."""
     from provider_data.utils.base import deduplicate

@@ -114,6 +114,37 @@ def test_cloudflare_output_uses_city_country_and_site_code(monkeypatch):
     }
 
 
+def test_netskope_output_uses_city_country_and_site_code(monkeypatch):
+    netskope_geojson = import_provider_module(monkeypatch, "netskope_geojson")
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return [
+                {
+                    "name": "ZUR1",
+                    "city": "Zurich",
+                    "country_code": "CH",
+                    "latitude": 47.4611,
+                    "longitude": 8.553,
+                    "is_dp": True,
+                }
+            ]
+
+    monkeypatch.setattr(netskope_geojson.httpx, "get", lambda *_, **__: Response())
+
+    locations = netskope_geojson.get_data()
+    features = netskope_geojson.convert_to_geojson(locations)
+
+    assert features[0]["properties"] == {
+        "city": "Zurich",
+        "countryCode": "CH",
+        "siteCode": "ZUR1",
+    }
+
+
 def test_fortinet_keeps_multiple_facilities_for_same_airport_code(monkeypatch):
     fortinet_geojson = import_provider_module(monkeypatch, "fortinet_geojson")
 
