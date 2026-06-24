@@ -72,6 +72,48 @@ def test_cisco_uses_facility_name_before_falling_back_to_location(monkeypatch):
     ) == ["Equinix Ashburn, Ashburn, US", "Ashburn, US"]
 
 
+def test_cloudflare_output_uses_city_country_and_site_code(monkeypatch):
+    cloudflare_geojson = import_provider_module(monkeypatch, "cloudflare_geojson")
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return [
+                {
+                    "iata": "ZRH",
+                    "city": " Zurich ",
+                    "cca2": "CH",
+                    "lat": 47.4647,
+                    "lon": 8.5492,
+                },
+                {
+                    "iata": "AGR",
+                    "city": "",
+                    "cca2": "IN",
+                    "lat": 27.1767,
+                    "lon": 78.0081,
+                },
+            ]
+
+    monkeypatch.setattr(cloudflare_geojson.httpx, "get", lambda *_, **__: Response())
+
+    locations = cloudflare_geojson.get_cloudflare_data()
+    features = cloudflare_geojson.convert_to_geojson(locations)
+
+    assert features[0]["properties"] == {
+        "city": "Zurich",
+        "countryCode": "CH",
+        "siteCode": "ZRH",
+    }
+    assert features[1]["properties"] == {
+        "city": "AGR",
+        "countryCode": "IN",
+        "siteCode": "AGR",
+    }
+
+
 def test_fortinet_keeps_multiple_facilities_for_same_airport_code(monkeypatch):
     fortinet_geojson = import_provider_module(monkeypatch, "fortinet_geojson")
 

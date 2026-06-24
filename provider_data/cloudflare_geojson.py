@@ -24,7 +24,12 @@ def get_cloudflare_data():
     locations = []
     for colo in colos:
         locations.append(
-            {"name": colo["iata"], "coordinates": [colo["lat"], colo["lon"]]}
+            {
+                "name": (colo.get("city") or "").strip() or colo["iata"],
+                "coordinates": [colo["lat"], colo["lon"]],
+                "countryCode": colo.get("cca2"),
+                "siteCode": colo["iata"],
+            }
         )
 
     return [i for n, i in enumerate(locations) if i not in locations[n + 1 :]]
