@@ -223,7 +223,7 @@ def get_aws_data() -> list[dict]:
 if __name__ == "__main__":
     provider_name = "aws"
     friendly_name = "AWS CloudFront"
-    app_type = ["sase", "cdn"]
+    app_type = ["cdn"]
 
     parser = argparse.ArgumentParser(
         description="Update dev, prod or both environments."
