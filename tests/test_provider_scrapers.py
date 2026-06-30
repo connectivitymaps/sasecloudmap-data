@@ -2,7 +2,6 @@ import importlib
 import sys
 from pathlib import Path
 
-
 PROVIDER_DIR = Path(__file__).resolve().parent.parent / "provider_data"
 
 
@@ -288,3 +287,110 @@ def test_paloalto_skips_country_only_location_labels(monkeypatch):
     assert paloalto_geojson.extract_paloalto_locations(html) == [
         "Amsterdam, Netherlands",
     ]
+
+
+def test_aws_extract_pop_rows_parses_regions_countries_and_cities(monkeypatch):
+    aws_geojson = import_provider_module(monkeypatch, "aws_geojson")
+
+    html = """
+    <div id="points-of-presence-pops">
+      <div data-rg-n="BodyText">
+        <p><b>North America</b></p>
+        <p><b>Canada:</b> Calgary (2), Montreal 3)</p>
+        <p><b>United States: </b>Atlanta (29), Boston (6)</p>
+        <p>&nbsp;</p>
+        <p><b>South America</b></p>
+        <p><b>Brazil:</b> Fortaleza (6), Guarulhos (16)</p>
+        <p><b>Embedded Points of Presence (PoPs)</b></p>
+        <p><b>Some Country:</b> Should not appear</p>
+      </div>
+    </div>
+    """
+
+    assert aws_geojson.extract_pop_rows(html) == [
+        {"region": "North America", "country": "Canada", "city": "Calgary"},
+        {"region": "North America", "country": "Canada", "city": "Montreal"},
+        {"region": "North America", "country": "United States", "city": "Atlanta"},
+        {"region": "North America", "country": "United States", "city": "Boston"},
+        {"region": "South America", "country": "Brazil", "city": "Fortaleza"},
+        {"region": "South America", "country": "Brazil", "city": "Guarulhos"},
+    ]
+
+
+def test_aws_extract_pop_rows_handles_singapore_and_malformed_blocks(monkeypatch):
+    aws_geojson = import_provider_module(monkeypatch, "aws_geojson")
+
+    html = """
+    <div id="points-of-presence-pops">
+      <div data-rg-n="BodyText">
+        <p><b>North America</b></p>
+        <p><b>Singapore</b> (12)</p>
+        <p><b>Portugal:</b> LisbonRomania: Bucharest (3)</p>
+      </div>
+    </div>
+    """
+
+    assert aws_geojson.extract_pop_rows(html) == [
+        {"region": "North America", "country": "Singapore", "city": "Singapore"},
+        {"region": "North America", "country": "Portugal", "city": "Lisbon"},
+        {"region": "North America", "country": "Romania", "city": "Bucharest"},
+    ]
+
+
+def test_aws_split_cities_splits_and_strips_counts(monkeypatch):
+    aws_geojson = import_provider_module(monkeypatch, "aws_geojson")
+
+    assert aws_geojson.split_cities(
+        "Calgary (2), Montreal (3), Santiago de Queretaro (10)"
+    ) == [
+        "Calgary",
+        "Montreal",
+        "Santiago de Queretaro",
+    ]
+
+
+def test_aws_split_cities_handles_malformed_counts(monkeypatch):
+    aws_geojson = import_provider_module(monkeypatch, "aws_geojson")
+
+    assert aws_geojson.split_cities(
+        "Minneapolis (5), Nashville 2), Newark, New York (26)"
+    ) == [
+        "Minneapolis",
+        "Nashville",
+        "Newark",
+        "New York",
+    ]
+
+
+def test_aws_parse_city_name_trims_whitespace_and_commas(monkeypatch):
+    aws_geojson = import_provider_module(monkeypatch, "aws_geojson")
+
+    assert aws_geojson.parse_city_name("Lisbon,") == "Lisbon"
+    assert aws_geojson.parse_city_name("  Singapore  ") == "Singapore"
+    assert aws_geojson.parse_city_name("  ") is None
+
+
+def test_aws_geocode_city_uses_nominatim(monkeypatch):
+    aws_geojson = import_provider_module(monkeypatch, "aws_geojson")
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return [
+                {
+                    "lat": "51.0504",
+                    "lon": "13.7373",
+                    "address": {"country_code": "de"},
+                }
+            ]
+
+    monkeypatch.setattr(aws_geojson, "nominatim_get", lambda *_, **__: Response())
+    monkeypatch.setattr(aws_geojson.time, "sleep", lambda _: None)
+
+    assert aws_geojson.geocode_city("Berlin", "Germany") == {
+        "name": "Berlin",
+        "coordinates": ["51.0504", "13.7373"],
+        "countryCode": "DE",
+    }
