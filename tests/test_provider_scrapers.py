@@ -2,7 +2,6 @@ import importlib
 import sys
 from pathlib import Path
 
-
 PROVIDER_DIR = Path(__file__).resolve().parent.parent / "provider_data"
 
 
@@ -70,6 +69,96 @@ def test_cisco_uses_facility_name_before_falling_back_to_location(monkeypatch):
     assert cisco_umbrella_geojson.build_geocode_queries(
         "Ashburn, US", "Equinix Ashburn"
     ) == ["Equinix Ashburn, Ashburn, US", "Ashburn, US"]
+
+
+def test_oracle_extracts_region_rows(monkeypatch):
+    oracle_geojson = import_provider_module(monkeypatch, "oracle_geojson")
+
+    html = """
+    <table>
+      <thead>
+        <tr>
+          <th>Region Name</th>
+          <th>Region Identifier</th>
+          <th>Region Location</th>
+          <th>Region Key</th>
+          <th>Realm Key</th>
+          <th>Availability Domains</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Australia East (Sydney)</td>
+          <td>ap-sydney-1</td>
+          <td>Sydney, Australia</td>
+          <td>SYD</td>
+          <td>OC1</td>
+          <td>1</td>
+        </tr>
+        <tr>
+          <td>US East (Ashburn)</td>
+          <td>us-ashburn-1</td>
+          <td>Ashburn, VA</td>
+          <td>IAD</td>
+          <td>OC1</td>
+          <td>3</td>
+        </tr>
+      </tbody>
+    </table>
+    """
+
+    assert oracle_geojson.extract_region_rows(html) == [
+        {
+            "region_name": "Australia East (Sydney)",
+            "region_location": "Sydney, Australia",
+            "region_key": "SYD",
+        },
+        {
+            "region_name": "US East (Ashburn)",
+            "region_location": "Ashburn, VA",
+            "region_key": "IAD",
+        },
+    ]
+
+
+def test_oracle_parse_region_location_splits_city_and_remainder(monkeypatch):
+    oracle_geojson = import_provider_module(monkeypatch, "oracle_geojson")
+
+    assert oracle_geojson.parse_region_location("Sydney, Australia") == (
+        "Sydney",
+        "Australia",
+    )
+    assert oracle_geojson.parse_region_location("Ashburn, VA") == ("Ashburn", "VA")
+    assert oracle_geojson.parse_region_location("Jovanovac,Serbia") == (
+        "Jovanovac",
+        "Serbia",
+    )
+
+
+def test_oracle_geocode_region_location_uses_nominatim(monkeypatch):
+    oracle_geojson = import_provider_module(monkeypatch, "oracle_geojson")
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return [
+                {
+                    "lat": "-33.8688",
+                    "lon": "151.2093",
+                    "address": {"country_code": "au"},
+                }
+            ]
+
+    monkeypatch.setattr(oracle_geojson, "nominatim_get", lambda *_, **__: Response())
+    monkeypatch.setattr(oracle_geojson.time, "sleep", lambda _: None)
+
+    assert oracle_geojson.geocode_region_location("Sydney, Australia", "Sydney") == {
+        "name": "Sydney",
+        "coordinates": ["-33.8688", "151.2093"],
+        "countryCode": "AU",
+    }
 
 
 def test_cloudflare_output_uses_city_country_and_site_code(monkeypatch):
