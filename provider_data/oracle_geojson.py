@@ -154,7 +154,7 @@ def get_oracle_data() -> list[dict]:
 if __name__ == "__main__":
     provider_name = "oracle"
     friendly_name = "Oracle Cloud Infrastructure"
-    app_type = ["cloud"]
+    app_type = ["sase", "cdn"]
 
     parser = argparse.ArgumentParser(
         description="Update dev, prod or both environments."
