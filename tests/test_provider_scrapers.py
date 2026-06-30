@@ -72,6 +72,86 @@ def test_cisco_uses_facility_name_before_falling_back_to_location(monkeypatch):
     ) == ["Equinix Ashburn, Ashburn, US", "Ashburn, US"]
 
 
+def test_fastly_extracts_location_code_and_coordinates(monkeypatch):
+    fastly_geojson = import_provider_module(monkeypatch, "fastly_geojson")
+
+    html = """
+    <h2 id="complete-list-of-pops">Complete list of POPs</h2>
+    <div class="tableWrapper">
+      <table>
+        <tr><th>Location</th><th>POP Identifier</th><th>Approx location</th></tr>
+        <tr>
+          <td>Adelaide</td>
+          <td><strong>ADL</strong></td>
+          <td>
+            <a href="https://www.google.com/maps/search/?api=1&amp;query=-34.9285,138.6007">
+              -34.9285, 138.6007
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td>Agra</td>
+          <td><strong>QAS</strong></td>
+          <td>
+            <a href="https://www.google.com/maps/search/?api=1&amp;query=25.578,91.876">
+              25.578<!-- -->, <!-- -->91.876
+            </a>
+          </td>
+        </tr>
+      </table>
+    </div>
+    """
+
+    assert fastly_geojson.extract_location_rows(html) == [
+        {
+            "location": "Adelaide",
+            "pop_code": "ADL",
+            "coordinates": (-34.9285, 138.6007),
+        },
+        {"location": "Agra", "pop_code": "QAS", "coordinates": (25.578, 91.876)},
+    ]
+
+
+def test_fastly_extracts_coordinates_from_cell_text(monkeypatch):
+    fastly_geojson = import_provider_module(monkeypatch, "fastly_geojson")
+
+    html = """
+    <h2 id="complete-list-of-pops">Complete list of POPs</h2>
+    <table>
+      <tr><th>Location</th><th>POP Identifier</th><th>Approx location</th></tr>
+      <tr>
+        <td>Wellington</td>
+        <td><strong>WLG</strong></td>
+        <td>-41.327221, 174.805278</td>
+      </tr>
+    </table>
+    """
+
+    assert fastly_geojson.extract_location_rows(html) == [
+        {
+            "location": "Wellington",
+            "pop_code": "WLG",
+            "coordinates": (-41.327221, 174.805278),
+        }
+    ]
+
+
+def test_fastly_country_code_from_coordinates_uses_nominatim(monkeypatch):
+    fastly_geojson = import_provider_module(monkeypatch, "fastly_geojson")
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"address": {"country_code": "au"}}
+
+    monkeypatch.setattr(fastly_geojson, "nominatim_get", lambda *_, **__: Response())
+    monkeypatch.setattr(fastly_geojson.time, "sleep", lambda _: None)
+
+    assert fastly_geojson.country_code_from_coordinates(-34.9285, 138.6007) == "AU"
+
+
 def test_cloudflare_output_uses_city_country_and_site_code(monkeypatch):
     cloudflare_geojson = import_provider_module(monkeypatch, "cloudflare_geojson")
 
