@@ -2,7 +2,6 @@ import importlib
 import sys
 from pathlib import Path
 
-
 PROVIDER_DIR = Path(__file__).resolve().parent.parent / "provider_data"
 
 
@@ -287,4 +286,70 @@ def test_paloalto_skips_country_only_location_labels(monkeypatch):
 
     assert paloalto_geojson.extract_paloalto_locations(html) == [
         "Amsterdam, Netherlands",
+    ]
+
+
+def test_googlecloud_parse_label_splits_city_state_and_country(monkeypatch):
+    googlecloud_geojson = import_provider_module(monkeypatch, "googlecloud_geojson")
+
+    assert googlecloud_geojson.parse_label("Amsterdam, Netherlands") == {
+        "city": "Amsterdam",
+        "state": "",
+        "country": "Netherlands",
+    }
+    assert googlecloud_geojson.parse_label("Ashburn, VA, USA") == {
+        "city": "Ashburn",
+        "state": "VA",
+        "country": "USA",
+    }
+    assert googlecloud_geojson.parse_label("Singapore") == {
+        "city": "Singapore",
+        "state": "",
+        "country": "",
+    }
+
+
+def test_googlecloud_country_code_from_coordinates_uses_nominatim(monkeypatch):
+    googlecloud_geojson = import_provider_module(monkeypatch, "googlecloud_geojson")
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"address": {"country_code": "nl"}}
+
+    monkeypatch.setattr(
+        googlecloud_geojson, "nominatim_get", lambda *_, **__: Response()
+    )
+    monkeypatch.setattr(googlecloud_geojson.time, "sleep", lambda _: None)
+
+    assert googlecloud_geojson.country_code_from_coordinates(52.37, 4.90) == "NL"
+
+
+def test_googlecloud_get_data_parses_marker_json(monkeypatch):
+    googlecloud_geojson = import_provider_module(monkeypatch, "googlecloud_geojson")
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return [
+                {"lat": 52.37, "lng": 4.9, "label": "Amsterdam, Netherlands"},
+                {"lat": 39.11, "lng": -74.5, "label": "New York, NY, USA"},
+            ]
+
+    monkeypatch.setattr(googlecloud_geojson.httpx, "get", lambda *_, **__: Response())
+    monkeypatch.setattr(
+        googlecloud_geojson,
+        "country_code_from_coordinates",
+        lambda *_, **__: "NL",
+    )
+
+    data = googlecloud_geojson.get_googlecloud_data()
+
+    assert data == [
+        {"name": "Amsterdam", "coordinates": [52.37, 4.9], "countryCode": "NL"},
+        {"name": "New York", "coordinates": [39.11, -74.5], "countryCode": "NL"},
     ]
