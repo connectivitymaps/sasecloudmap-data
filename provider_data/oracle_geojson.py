@@ -32,20 +32,6 @@ class LocationRecord(TypedDict, total=False):
     siteCode: str
 
 
-def parse_region_location(location: str) -> tuple[str, str]:
-    """Split a region location into city and remainder (state or country).
-
-    Examples:
-        "Sydney, Australia" -> ("Sydney", "Australia")
-        "Ashburn, VA" -> ("Ashburn", "VA")
-        "Jovanovac,Serbia" -> ("Jovanovac", "Serbia")
-    """
-    parts = location.split(",", maxsplit=1)
-    city = parts[0].strip()
-    remainder = parts[1].strip() if len(parts) > 1 else ""
-    return city, remainder
-
-
 def extract_region_rows(html: str) -> list[RegionRow]:
     """Parse Oracle region rows from the documentation HTML.
 
@@ -139,7 +125,7 @@ def get_oracle_data() -> list[dict]:
 
     locations = []
     for index, row in enumerate(rows, start=1):
-        city, _ = parse_region_location(row["region_location"])
+        city = row["region_location"].partition(",")[0].strip()
         print(f"  [{index}/{len(rows)}] {row['region_name']} ({row['region_key']})")
         location = geocode_region_location(row["region_location"], city)
         if location is None:
@@ -154,7 +140,7 @@ def get_oracle_data() -> list[dict]:
 if __name__ == "__main__":
     provider_name = "oracle"
     friendly_name = "Oracle Cloud Infrastructure"
-    app_type = ["sase", "cdn"]
+    app_type = ["cdn"]
 
     parser = argparse.ArgumentParser(
         description="Update dev, prod or both environments."
@@ -169,7 +155,7 @@ if __name__ == "__main__":
 
     if args.refresh:
         oracle_data = get_oracle_data()
-        geojson = convert_to_geojson([*oracle_data])
+        geojson = convert_to_geojson(oracle_data)
         geojson_data = geojson_skeleton(geojson)
         write_geojson_output(provider_name, geojson_data)
 

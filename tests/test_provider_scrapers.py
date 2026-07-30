@@ -121,20 +121,6 @@ def test_oracle_extracts_region_rows(monkeypatch):
     ]
 
 
-def test_oracle_parse_region_location_splits_city_and_remainder(monkeypatch):
-    oracle_geojson = import_provider_module(monkeypatch, "oracle_geojson")
-
-    assert oracle_geojson.parse_region_location("Sydney, Australia") == (
-        "Sydney",
-        "Australia",
-    )
-    assert oracle_geojson.parse_region_location("Ashburn, VA") == ("Ashburn", "VA")
-    assert oracle_geojson.parse_region_location("Jovanovac,Serbia") == (
-        "Jovanovac",
-        "Serbia",
-    )
-
-
 def test_oracle_geocode_region_location_uses_nominatim(monkeypatch):
     oracle_geojson = import_provider_module(monkeypatch, "oracle_geojson")
 
