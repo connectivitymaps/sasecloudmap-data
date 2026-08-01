@@ -43,16 +43,3 @@ def convert_to_geojson(data: list[dict]) -> list[dict]:
         }
         features.append(feature)
     return features
-
-
-def deduplicate(items: list) -> list:
-    """Remove duplicates while preserving order (keeps first occurrence).
-
-    For hashable items (strings), uses dict.fromkeys().
-    For unhashable items (dicts), uses list comprehension.
-    """
-    if not items:
-        return items
-    if isinstance(items[0], dict):
-        return [i for n, i in enumerate(items) if i not in items[n + 1 :]]
-    return list(dict.fromkeys(items))

@@ -6,7 +6,7 @@ import sys
 import time
 
 import httpx
-from provider_data.utils.base import convert_to_geojson as base_convert_to_geojson
+from provider_data.utils.base import convert_to_geojson
 from provider_data.utils.browser_rendering import extract_json, extract_markdown
 from provider_data.utils.geocoding import nominatim_get
 from provider_data.utils.http_config import http_request_kwargs
@@ -203,11 +203,6 @@ def get_data():
             time.sleep(1)  # Nominatim rate limit: 1 request/second
 
     return locations
-
-
-def convert_to_geojson(data):
-    """Convert passed data to proper GeoJSON."""
-    return base_convert_to_geojson(data)
 
 
 if __name__ == "__main__":

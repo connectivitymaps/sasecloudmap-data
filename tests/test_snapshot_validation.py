@@ -326,7 +326,7 @@ def test_validate_main_warn_only_does_not_exit_nonzero_on_warnings(
     monkeypatch.setattr(
         validate_snapshot,
         "validate",
-        lambda output_dir, threshold: [
+        lambda output_dir, threshold, expected_files=None: [
             {
                 "provider": "forcepoint",
                 "old": 3,
@@ -348,6 +348,53 @@ def test_validate_main_warn_only_does_not_exit_nonzero_on_warnings(
     )
 
     validate_snapshot.main()
+
+
+def test_validate_main_scopes_expected_files_and_exits_on_warning(
+    monkeypatch, tmp_path
+):
+    from provider_data.utils import validate_snapshot
+
+    captured = {}
+
+    def fake_validate(output_dir, threshold, *, expected_files):
+        captured["output_dir"] = output_dir
+        captured["threshold"] = threshold
+        captured["expected_files"] = expected_files
+        return [
+            {
+                "provider": "cloudflare",
+                "old": 1,
+                "new": 0,
+                "change_pct": -100.0,
+                "reason": "test warning",
+            }
+        ]
+
+    monkeypatch.setattr(validate_snapshot, "load_dotenv", lambda: None)
+    monkeypatch.setattr(validate_snapshot, "validate", fake_validate)
+    monkeypatch.setattr(
+        validate_snapshot.sys,
+        "argv",
+        [
+            "validate_snapshot.py",
+            "--expected-file",
+            "cloudflare.json",
+            "--output-dir",
+            str(tmp_path),
+            "--threshold",
+            "12.5",
+        ],
+    )
+
+    with pytest.raises(SystemExit, match="1"):
+        validate_snapshot.main()
+
+    assert captured == {
+        "output_dir": tmp_path,
+        "threshold": 12.5,
+        "expected_files": {"cloudflare.json"},
+    }
 
 
 def test_validate_snapshot_script_executes_directly_without_http_shadowing():

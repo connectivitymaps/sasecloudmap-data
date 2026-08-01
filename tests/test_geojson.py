@@ -274,21 +274,3 @@ def test_location_from_nominatim_result_falls_back_to_provider_label():
         "name": "Zurich 1, Switzerland",
         "coordinates": ["47.3744", "8.541"],
     }
-
-
-def test_deduplicate():
-    """Test the deduplicate utility function."""
-    from provider_data.utils.base import deduplicate
-
-    # Test with strings
-    strings = ["a", "b", "a", "c", "b"]
-    assert deduplicate(strings) == ["a", "b", "c"]
-
-    # Test with dicts (keeps last occurrence due to algorithm)
-    dicts = [{"x": 1}, {"x": 2}, {"x": 1}]
-    result = deduplicate(dicts)
-    assert len(result) == 2
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

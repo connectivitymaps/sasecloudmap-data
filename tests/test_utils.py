@@ -1,7 +1,9 @@
 import importlib
 import json
 import sys
+from concurrent.futures import Future
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -13,6 +15,17 @@ class DummyResponse:
 
     def json(self):
         return self._json_data
+
+
+def stub_run_all_executor(monkeypatch, run_all, result=(True, None)):
+    future = Future()
+    future.set_result(result)
+    executor = MagicMock()
+    executor.__enter__.return_value = executor
+    executor.submit.return_value = future
+    factory = MagicMock(return_value=executor)
+    monkeypatch.setattr(run_all, "ThreadPoolExecutor", factory)
+    return factory, executor
 
 
 def write_output_file(tmp_path, provider_name, payload=None):
@@ -152,73 +165,36 @@ def test_run_provider_uses_current_python_interpreter(monkeypatch):
 def test_run_all_uses_single_worker_for_refresh(monkeypatch):
     from provider_data import run_all
 
-    captured = {}
-
-    class DummyFuture:
-        def result(self):
-            return True, None
-
-    future = DummyFuture()
-
-    class DummyExecutor:
-        def __init__(self, max_workers):
-            captured["max_workers"] = max_workers
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def submit(self, fn, *args):
-            captured["submitted"] = (fn, args)
-            return future
+    factory, _ = stub_run_all_executor(monkeypatch, run_all)
 
     monkeypatch.setattr(
         run_all,
         "discover_providers",
         lambda: [Path("provider_data/cloudflare_geojson.py")],
     )
-    monkeypatch.setattr(run_all, "ThreadPoolExecutor", DummyExecutor)
-    monkeypatch.setattr(run_all, "as_completed", lambda futures: list(futures.keys()))
     monkeypatch.setattr(run_all.sys, "argv", ["run_all.py", "--refresh"])
 
     with pytest.raises(SystemExit) as exc_info:
         run_all.main()
 
     assert exc_info.value.code == 0
-    assert captured["max_workers"] == 1
+    factory.assert_called_once_with(max_workers=1)
 
 
 def test_run_all_fails_at_end_when_fail_on_any_failure_is_enabled(monkeypatch):
     from provider_data import run_all
 
-    class DummyFuture:
-        def result(self):
-            return False, ("RuntimeError: boom", "traceback")
-
-    future = DummyFuture()
-
-    class DummyExecutor:
-        def __init__(self, max_workers):
-            self.max_workers = max_workers
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def submit(self, fn, *args):
-            return future
+    stub_run_all_executor(
+        monkeypatch,
+        run_all,
+        result=(False, ("RuntimeError: boom", "traceback")),
+    )
 
     monkeypatch.setattr(
         run_all,
         "discover_providers",
         lambda: [Path("provider_data/cloudflare_geojson.py")],
     )
-    monkeypatch.setattr(run_all, "ThreadPoolExecutor", DummyExecutor)
-    monkeypatch.setattr(run_all, "as_completed", lambda futures: list(futures.keys()))
     monkeypatch.setattr(
         run_all.sys,
         "argv",
@@ -235,31 +211,13 @@ def test_run_all_prompts_for_dev_sitemap_when_interactive(monkeypatch):
     from provider_data import run_all
 
     calls = []
-
-    class DummyFuture:
-        def result(self):
-            return True, None
-
-    class DummyExecutor:
-        def __init__(self, max_workers):
-            self.max_workers = max_workers
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def submit(self, fn, *args):
-            return DummyFuture()
+    stub_run_all_executor(monkeypatch, run_all)
 
     monkeypatch.setattr(
         run_all,
         "discover_providers",
         lambda: [Path("provider_data/cloudflare_geojson.py")],
     )
-    monkeypatch.setattr(run_all, "ThreadPoolExecutor", DummyExecutor)
-    monkeypatch.setattr(run_all, "as_completed", lambda futures: list(futures.keys()))
     monkeypatch.setattr(run_all.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(run_all, "input", lambda prompt: "y")
     monkeypatch.setattr(run_all, "run_sitemap", lambda target: calls.append(target))
@@ -277,31 +235,13 @@ def test_run_all_generate_sitemap_option_runs_dev_and_prod_without_prompt(monkey
 
     calls = []
     prompts = []
-
-    class DummyFuture:
-        def result(self):
-            return True, None
-
-    class DummyExecutor:
-        def __init__(self, max_workers):
-            self.max_workers = max_workers
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def submit(self, fn, *args):
-            return DummyFuture()
+    stub_run_all_executor(monkeypatch, run_all)
 
     monkeypatch.setattr(
         run_all,
         "discover_providers",
         lambda: [Path("provider_data/cloudflare_geojson.py")],
     )
-    monkeypatch.setattr(run_all, "ThreadPoolExecutor", DummyExecutor)
-    monkeypatch.setattr(run_all, "as_completed", lambda futures: list(futures.keys()))
     monkeypatch.setattr(run_all.sys.stdin, "isatty", lambda: False)
     monkeypatch.setattr(run_all, "input", lambda prompt: prompts.append(prompt) or "n")
     monkeypatch.setattr(run_all, "run_sitemap", lambda target: calls.append(target))
@@ -324,31 +264,13 @@ def test_run_all_skip_sitemap_option_suppresses_interactive_prompt(monkeypatch):
 
     calls = []
     prompts = []
-
-    class DummyFuture:
-        def result(self):
-            return True, None
-
-    class DummyExecutor:
-        def __init__(self, max_workers):
-            self.max_workers = max_workers
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def submit(self, fn, *args):
-            return DummyFuture()
+    stub_run_all_executor(monkeypatch, run_all)
 
     monkeypatch.setattr(
         run_all,
         "discover_providers",
         lambda: [Path("provider_data/cloudflare_geojson.py")],
     )
-    monkeypatch.setattr(run_all, "ThreadPoolExecutor", DummyExecutor)
-    monkeypatch.setattr(run_all, "as_completed", lambda futures: list(futures.keys()))
     monkeypatch.setattr(run_all.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(run_all, "input", lambda prompt: prompts.append(prompt) or "y")
     monkeypatch.setattr(run_all, "run_sitemap", lambda target: calls.append(target))
@@ -376,31 +298,9 @@ def test_run_all_provider_flag_accepts_declared_provider_name(monkeypatch, tmp_p
         encoding="utf-8",
     )
 
-    captured = {}
-
-    class DummyFuture:
-        def result(self):
-            return True, None
-
-    future = DummyFuture()
-
-    class DummyExecutor:
-        def __init__(self, max_workers):
-            self.max_workers = max_workers
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def submit(self, fn, *args):
-            captured["submitted_args"] = args
-            return future
+    _, executor = stub_run_all_executor(monkeypatch, run_all)
 
     monkeypatch.setattr(run_all, "discover_providers", lambda: [provider_script])
-    monkeypatch.setattr(run_all, "ThreadPoolExecutor", DummyExecutor)
-    monkeypatch.setattr(run_all, "as_completed", lambda futures: list(futures.keys()))
     monkeypatch.setattr(
         run_all.sys,
         "argv",
@@ -411,7 +311,7 @@ def test_run_all_provider_flag_accepts_declared_provider_name(monkeypatch, tmp_p
         run_all.main()
 
     assert exc_info.value.code == 0
-    assert captured["submitted_args"][0] == provider_script
+    assert executor.submit.call_args.args[1] == provider_script
 
 
 def test_remove_failed_refresh_output_deletes_partial_output(monkeypatch, tmp_path):

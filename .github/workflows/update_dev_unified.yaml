@@ -105,7 +105,7 @@ jobs:
         if: steps.refresh.outcome == 'success' && steps.output_exists.outputs.exists == 'true'
         continue-on-error: true
         run: |
-          uv run python -m provider_data.utils.validate_provider_snapshot \
+          uv run python -m provider_data.utils.validate_snapshot \
             --expected-file "${{ matrix.provider.output_file }}" \
             --output-dir output \
             --threshold 10.0

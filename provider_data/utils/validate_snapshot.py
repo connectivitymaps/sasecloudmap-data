@@ -204,6 +204,11 @@ def main():
         action="store_true",
         help="Print warnings but exit successfully",
     )
+    parser.add_argument(
+        "--expected-file",
+        action="append",
+        help="Validate only this provider output file (repeatable)",
+    )
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
@@ -211,7 +216,11 @@ def main():
         print(f"Output directory not found: {output_dir}")
         raise SystemExit(1)
 
-    warnings = validate(output_dir, args.threshold)
+    warnings = validate(
+        output_dir,
+        args.threshold,
+        expected_files=set(args.expected_file) if args.expected_file else None,
+    )
 
     if warnings:
         print(f"\n{'=' * 60}")
