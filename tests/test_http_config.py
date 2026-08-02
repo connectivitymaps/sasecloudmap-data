@@ -28,6 +28,7 @@ def test_http_request_kwargs_builds_ssl_context_from_extra_ca(monkeypatch, tmp_p
     fake_context = FakeSSLContext()
 
     monkeypatch.setenv("EXTRA_CA_CERT_FILE", str(extra_bundle))
+    monkeypatch.delenv("RELAX_X509_STRICT", raising=False)
     monkeypatch.setattr(http_utils, "load_dotenv", lambda: None)
     monkeypatch.setattr(http_utils.ssl, "VERIFY_X509_STRICT", 32)
     monkeypatch.setattr(
