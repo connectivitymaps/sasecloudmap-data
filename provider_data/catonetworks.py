@@ -4,9 +4,10 @@ import csv
 import sys
 import time
 from io import StringIO
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
 
 import httpx
+from bs4 import BeautifulSoup
 from utils.base import convert_to_geojson, location_from_nominatim_result
 from utils.geocoding import nominatim_get
 from utils.http_config import http_request_kwargs
@@ -26,6 +27,8 @@ COUNTRY_ALIASES = {
 LOCATION_ALIASES = {
     "Vancourver": "Vancouver",
 }
+
+CATO_ARTICLE_URL = "https://knowledge.catonetworks.com/docs/en/production-pop-guide"
 
 
 def normalize_location_text(location_text: str) -> str:
@@ -79,15 +82,26 @@ def extract_location_rows(csv_text: str) -> list[dict[str, str]]:
     return deduplicated
 
 
-def get_data():
-    resp = httpx.get(
-        "https://support.catonetworks.com/hc/article_attachments/15675587976477",
-        **http_request_kwargs(),
+def fetch_location_csv() -> str:
+    article = httpx.get(CATO_ARTICLE_URL, **http_request_kwargs())
+    article.raise_for_status()
+    attachment = BeautifulSoup(article.text, "html.parser").find(
+        "a", href=lambda href: href and "Production_PoP_Guide.csv" in href
     )
-    resp.raise_for_status()
+    if attachment is None:
+        raise ValueError("Cato Production PoP Guide CSV attachment was not found")
+
+    response = httpx.get(
+        urljoin(CATO_ARTICLE_URL, attachment["href"]), **http_request_kwargs()
+    )
+    response.raise_for_status()
+    return response.text
+
+
+def get_data():
     locations = []
 
-    for location in extract_location_rows(resp.text):
+    for location in extract_location_rows(fetch_location_csv()):
         query = location["geocode_query"]
         try:
             req = nominatim_get(

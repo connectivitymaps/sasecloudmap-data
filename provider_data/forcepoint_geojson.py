@@ -1,13 +1,12 @@
 #!/usr/bin/env -S uv run
 import argparse
-import json
 import re
 import sys
 import time
 
 import httpx
 from provider_data.utils.base import convert_to_geojson
-from provider_data.utils.browser_rendering import extract_json, extract_markdown
+from provider_data.utils.browser_rendering import extract_markdown
 from provider_data.utils.geocoding import nominatim_get
 from provider_data.utils.http_config import http_request_kwargs
 from provider_data.utils.output import write_geojson_output
@@ -15,60 +14,6 @@ from provider_data.utils.post_data import write_and_post
 from provider_data.utils.skeleton import geojson_skeleton
 
 FORCEPOINT_URL = "https://support.forcepoint.com/s/article/Cloud-service-data-center-IP-addresses-port-numbers"
-
-
-def get_forcepoint_location_rows():
-    try:
-        rows = extract_forcepoint_rows_via_json()
-        if rows:
-            return rows
-    except Exception as exc:
-        print(
-            f"Browser Rendering JSON extraction failed, falling back to markdown: {exc}"
-        )
-    return extract_forcepoint_rows_via_markdown()
-
-
-def extract_forcepoint_rows_via_json():
-    result = extract_json(
-        url=FORCEPOINT_URL,
-        prompt=(
-            "Extract only the Forcepoint cloud service data center table rows. "
-            "Return country and city fields for each location. Ignore IP addresses, ports, "
-            "headers, notes, and unrelated tables."
-        ),
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "name": "forcepoint_locations",
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "rows": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "country": {"type": "string"},
-                                    "city": {"type": "string"},
-                                },
-                                "required": ["country", "city"],
-                                "additionalProperties": False,
-                            },
-                        }
-                    },
-                    "required": ["rows"],
-                    "additionalProperties": False,
-                },
-                "strict": True,
-            },
-        },
-        goto_options={"waitUntil": "load", "timeout": 45000},
-        wait_for_selector={"selector": "table", "visible": True},
-        wait_for_timeout=5000,
-        best_attempt=True,
-    )
-    return normalize_forcepoint_rows(_extract_rows_from_json_result(result))
 
 
 def extract_forcepoint_rows_via_markdown():
@@ -116,7 +61,7 @@ def parse_forcepoint_markdown_table(markdown: str) -> list[dict[str, str]]:
             continue
 
         cells = [cell.strip() for cell in line.strip("|").split("|")]
-        normalized = [cell.upper() for cell in cells]
+        normalized = [cell.strip("*_ ").upper() for cell in cells]
         if "COUNTRY" in normalized and "CITY" in normalized:
             country_index = normalized.index("COUNTRY")
             city_index = normalized.index("CITY")
@@ -147,36 +92,12 @@ def normalize_forcepoint_rows(rows: list[dict]) -> list[dict[str, str]]:
     return normalized
 
 
-def _extract_rows_from_json_result(result: dict) -> list[dict]:
-    rows = result.get("rows")
-    if isinstance(rows, list):
-        return rows
-
-    choices = result.get("choices") or []
-    if not choices:
-        return []
-
-    content = choices[0].get("message", {}).get("content")
-    if not isinstance(content, str):
-        return []
-
-    try:
-        parsed = json.loads(content)
-    except (json.JSONDecodeError, TypeError):
-        return []
-    if isinstance(parsed, dict):
-        rows = parsed.get("rows")
-        if isinstance(rows, list):
-            return rows
-    return []
-
-
 def _is_markdown_separator_row(cells: list[str]) -> bool:
     return all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells if cell)
 
 
 def get_data():
-    data = get_forcepoint_location_rows()
+    data = extract_forcepoint_rows_via_markdown()
 
     locations = []
     for row in data:

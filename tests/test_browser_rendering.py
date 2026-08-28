@@ -77,88 +77,18 @@ def test_browser_rendering_markdown_request_skips_custom_ai(monkeypatch):
     }
 
 
-def test_forcepoint_locations_use_json_result_without_fallback(monkeypatch):
+def test_forcepoint_get_data_fails_when_markdown_extraction_errors(monkeypatch):
     from provider_data import forcepoint_geojson
 
-    monkeypatch.setattr(
-        forcepoint_geojson,
-        "extract_forcepoint_rows_via_json",
-        lambda: [
-            {"country": "Germany", "city": "Berlin"},
-            {"country": "Japan", "city": "Tokyo"},
-        ],
-    )
-    monkeypatch.setattr(
-        forcepoint_geojson,
-        "extract_forcepoint_rows_via_markdown",
-        lambda: pytest.fail("markdown fallback should not run"),
-    )
-
-    rows = forcepoint_geojson.get_forcepoint_location_rows()
-
-    assert rows == [
-        {"country": "Germany", "city": "Berlin"},
-        {"country": "Japan", "city": "Tokyo"},
-    ]
-
-
-def test_forcepoint_locations_fall_back_to_markdown_when_json_is_empty(monkeypatch):
-    from provider_data import forcepoint_geojson
-
-    monkeypatch.setattr(
-        forcepoint_geojson, "extract_forcepoint_rows_via_json", lambda: []
-    )
-    monkeypatch.setattr(
-        forcepoint_geojson,
-        "extract_forcepoint_rows_via_markdown",
-        lambda: [{"country": "France", "city": "Paris"}],
-    )
-
-    rows = forcepoint_geojson.get_forcepoint_location_rows()
-
-    assert rows == [{"country": "France", "city": "Paris"}]
-
-
-def test_forcepoint_locations_fall_back_to_markdown_when_json_errors(monkeypatch):
-    from provider_data import forcepoint_geojson
-
-    def raise_timeout():
+    def fail_markdown():
         raise RuntimeError("timed out")
 
     monkeypatch.setattr(
-        forcepoint_geojson, "extract_forcepoint_rows_via_json", raise_timeout
-    )
-    monkeypatch.setattr(
-        forcepoint_geojson,
-        "extract_forcepoint_rows_via_markdown",
-        lambda: [{"country": "France", "city": "Paris"}],
+        forcepoint_geojson, "extract_forcepoint_rows_via_markdown", fail_markdown
     )
 
-    rows = forcepoint_geojson.get_forcepoint_location_rows()
-
-    assert rows == [{"country": "France", "city": "Paris"}]
-
-
-def test_forcepoint_json_parser_reads_workers_ai_wrapper(monkeypatch):
-    from provider_data import forcepoint_geojson
-
-    monkeypatch.setattr(
-        forcepoint_geojson,
-        "extract_json",
-        lambda **_: {
-            "choices": [
-                {
-                    "message": {
-                        "content": '{"rows":[{"country":"Germany","city":"Frankfurt"}]}'
-                    }
-                }
-            ]
-        },
-    )
-
-    rows = forcepoint_geojson.extract_forcepoint_rows_via_json()
-
-    assert rows == [{"country": "Germany", "city": "Frankfurt"}]
+    with pytest.raises(RuntimeError, match="timed out"):
+        forcepoint_geojson.get_data()
 
 
 def test_forcepoint_markdown_parser_extracts_country_and_city_rows():
@@ -176,6 +106,26 @@ def test_forcepoint_markdown_parser_extracts_country_and_city_rows():
     assert rows == [
         {"country": "Germany", "city": "Berlin"},
         {"country": "Japan", "city": "Tokyo"},
+    ]
+
+
+def test_forcepoint_markdown_parser_prefers_bold_data_center_table():
+    from provider_data import forcepoint_geojson
+
+    markdown = """
+#### Data Center Locations and IP Addresses
+| **COUNTRY** | **CITY** | **DATA CENTER ID** |
+| --- | --- | --- |
+| Germany | Frankfurt | B |
+
+#### Local Point of Presence Locations and IP Addresses
+| Country | City | Local PoP ID |
+| --- | --- | --- |
+| Albania | Tirana | TIAA |
+"""
+
+    assert forcepoint_geojson.parse_forcepoint_markdown_table(markdown) == [
+        {"country": "Germany", "city": "Frankfurt"}
     ]
 
 
@@ -246,7 +196,7 @@ def test_forcepoint_get_data_converts_nominatim_coordinates_to_lat_lon(monkeypat
 
     monkeypatch.setattr(
         forcepoint_geojson,
-        "get_forcepoint_location_rows",
+        "extract_forcepoint_rows_via_markdown",
         lambda: [{"country": "Australia", "city": "Sydney"}],
     )
     monkeypatch.setattr(

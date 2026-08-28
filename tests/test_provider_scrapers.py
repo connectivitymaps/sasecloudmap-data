@@ -23,6 +23,40 @@ def test_cato_prefers_serviced_through_geo_location(monkeypatch):
     ]
 
 
+def test_cato_fetches_current_csv_attachment(monkeypatch):
+    catonetworks = import_provider_module(monkeypatch, "catonetworks")
+
+    article_url = "https://knowledge.catonetworks.com/docs/en/production-pop-guide"
+    csv_url = (
+        "https://cdn.document360.io/example/Production_PoP_Guide.csv"
+        "?se=future&sig=token"
+    )
+    csv_text = "Region,PoP\xa0Location\nAmericas,Chicago\n"
+
+    class Response:
+        def __init__(self, text):
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+    responses = {
+        article_url: Response(
+            '<a href="https://cdn.document360.io/example/'
+            'Production_PoP_Guide.csv?se=future&amp;sig=token">'
+            "Production_PoP_Guide.csv</a>"
+        ),
+        csv_url: Response(csv_text),
+    }
+    monkeypatch.setattr(
+        catonetworks.httpx,
+        "get",
+        lambda url, **_: responses[url],
+    )
+
+    assert catonetworks.fetch_location_csv() == csv_text
+
+
 def test_cato_normalizes_known_city_and_country_aliases(monkeypatch):
     catonetworks = import_provider_module(monkeypatch, "catonetworks")
 
