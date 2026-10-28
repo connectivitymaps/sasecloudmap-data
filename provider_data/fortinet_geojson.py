@@ -90,7 +90,7 @@ def normalize_location_text(location_text: str) -> str:
 
 def extract_location_rows(html: str) -> list[dict[str, str]]:
     soup = BeautifulSoup(html, "html.parser")
-    content = soup.find(id="mc-main-content")
+    content = soup.select_one("#mc-main-content, .prose.src-mc, .prose.src-md")
     if content is None:
         raise ValueError("Could not find Fortinet content container")
 

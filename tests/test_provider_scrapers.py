@@ -2,6 +2,8 @@ import importlib
 import sys
 from pathlib import Path
 
+import pytest
+
 PROVIDER_DIR = Path(__file__).resolve().parent.parent / "provider_data"
 
 
@@ -352,13 +354,18 @@ def test_fortinet_keeps_multiple_facilities_for_same_airport_code(monkeypatch):
     ]
 
 
+@pytest.mark.parametrize(
+    "container",
+    ['id="mc-main-content"', 'class="prose src-mc"', 'class="prose src-md"'],
+)
 def test_fortinet_extracts_rows_when_location_and_code_are_separate_columns(
     monkeypatch,
+    container,
 ):
     fortinet_geojson = import_provider_module(monkeypatch, "fortinet_geojson")
 
-    html = """
-    <div id="mc-main-content">
+    html = f"""
+    <div {container}>
       <table>
         <thead>
           <tr>

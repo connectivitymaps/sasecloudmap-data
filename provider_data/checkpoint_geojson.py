@@ -54,7 +54,7 @@ def extract_checkpoint_locations(html: str) -> list[str]:
 
 def get_data():
     resp = httpx.get(
-        "https://sc1.checkpoint.com/documents/Infinity_Portal/WebAdminGuides/EN/SASE-Admin-Guide/Content/Topics-SASE-AG/Networks/Regions-PoP.htm",
+        "https://sc1.checkpoint.com/documents/Infinity_Portal/WebAdminGuides/EN/SASE-Admin-Guide/SASE_Security/Topics/regions_pop/regions_and_point_of_presence.html",
         **http_request_kwargs(),
     )
     resp.raise_for_status()
