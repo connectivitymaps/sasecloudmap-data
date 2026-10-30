@@ -484,3 +484,159 @@ def test_paloalto_skips_country_only_location_labels(monkeypatch):
     assert paloalto_geojson.extract_paloalto_locations(html) == [
         "Amsterdam, Netherlands",
     ]
+
+
+def _aws_regions_payload(continents: list[dict]) -> str:
+    """Wrap a continents list the way AWS embeds it in the page HTML.
+
+    AWS serialises the per-region dataset as a JSON *string* (double
+    encoded) inside the ``fields.continents`` key of an
+    ``application/json`` script tag used to drive the region map widget.
+    """
+    import json
+
+    continents_json = json.dumps(continents)
+    payload = {
+        "data": {
+            "items": [
+                {
+                    "fields": {
+                        "title": "AWS Global Infrastructure",
+                        "continents": continents_json,
+                    }
+                }
+            ]
+        }
+    }
+    return (
+        '<html><body><script type="application/json">'
+        + json.dumps(payload)
+        + "</script></body></html>"
+    )
+
+
+def test_aws_extracts_available_regions_with_coordinates(monkeypatch):
+    aws_geojson = import_provider_module(monkeypatch, "aws_geojson")
+
+    html = _aws_regions_payload(
+        [
+            {
+                "name": "North America",
+                "lat": 38.98,
+                "lng": -102.88,
+                "regions": [
+                    {
+                        "lng": -77.4874,
+                        "name": "US East (Northern Virginia)",
+                        "available": True,
+                        "availabilityZones": 6,
+                        "id": "us-east-1",
+                        "launched": "2006",
+                        "lat": 39.0438,
+                    },
+                    {
+                        "lng": -70.6693,
+                        "name": "South America (Chile)",
+                        "available": False,
+                        "availabilityZones": 0,
+                        "id": "sa-west-1",
+                        "lat": -33.4489,
+                    },
+                    {
+                        "lng": -0.1278,
+                        "name": "Europe (London) ",
+                        "available": True,
+                        "availabilityZones": 3,
+                        "id": "eu-west-2 ",
+                        "lat": 51.5074,
+                    },
+                ],
+            }
+        ]
+    )
+
+    regions = aws_geojson.extract_aws_regions(html)
+
+    assert regions == [
+        {
+            "name": "US East (Northern Virginia)",
+            "id": "us-east-1",
+            "lat": 39.0438,
+            "lng": -77.4874,
+            "available": True,
+        },
+        {
+            "name": "South America (Chile)",
+            "id": "sa-west-1",
+            "lat": -33.4489,
+            "lng": -70.6693,
+            "available": False,
+        },
+        {
+            "name": "Europe (London)",
+            "id": "eu-west-2",
+            "lat": 51.5074,
+            "lng": -0.1278,
+            "available": True,
+        },
+    ]
+
+
+def test_aws_region_city_name_prefers_parenthesised_location(monkeypatch):
+    aws_geojson = import_provider_module(monkeypatch, "aws_geojson")
+
+    assert aws_geojson.region_city_name("US East (Northern Virginia)") == (
+        "Northern Virginia"
+    )
+    assert aws_geojson.region_city_name("Europe (Frankfurt)") == "Frankfurt"
+    assert aws_geojson.region_city_name("AWS GovCloud (US-East)") == "US-East"
+    assert aws_geojson.region_city_name("No Parens Region") == "No Parens Region"
+
+
+def test_aws_get_aws_data_filters_unavailable_regions_and_sets_site_code(monkeypatch):
+    aws_geojson = import_provider_module(monkeypatch, "aws_geojson")
+
+    html = _aws_regions_payload(
+        [
+            {
+                "name": "North America",
+                "regions": [
+                    {
+                        "lng": -77.4874,
+                        "name": "US East (Northern Virginia)",
+                        "available": True,
+                        "availabilityZones": 6,
+                        "id": "us-east-1",
+                        "lat": 39.0438,
+                    },
+                    {
+                        "lng": -70.6693,
+                        "name": "South America (Chile)",
+                        "available": False,
+                        "availabilityZones": 0,
+                        "id": "sa-west-1",
+                        "lat": -33.4489,
+                    },
+                ],
+            }
+        ]
+    )
+
+    class Response:
+        def __init__(self, text):
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(aws_geojson.httpx, "get", lambda url, **_: Response(html))
+    monkeypatch.setattr(aws_geojson, "geocode_country_code", lambda lat, lng: "US")
+
+    assert aws_geojson.get_aws_data() == [
+        {
+            "name": "Northern Virginia",
+            "coordinates": [39.0438, -77.4874],
+            "siteCode": "us-east-1",
+            "countryCode": "US",
+        }
+    ]
