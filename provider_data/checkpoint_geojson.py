@@ -22,7 +22,7 @@ COUNTRY_ALIASES = {
 
 
 def normalize_location_text(text: str) -> str:
-    return re.sub(r"\s*\(\d+\)\s*$", "", text).strip()
+    return re.sub(r"\s*(?:\(\d+\)|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)\s*$", "", text).strip()
 
 
 def build_geocode_queries(location_text: str) -> list[str]:
@@ -46,6 +46,8 @@ def extract_checkpoint_locations(html: str) -> list[str]:
 
     processed_locations = []
     for item in table.find_all("li"):
+        for footnote in item.find_all("sup"):
+            footnote.decompose()
         location = normalize_location_text(item.get_text(" ", strip=True))
         if location:
             processed_locations.append(location)

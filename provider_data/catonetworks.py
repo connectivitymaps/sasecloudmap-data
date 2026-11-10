@@ -18,6 +18,7 @@ from utils.skeleton import geojson_skeleton
 
 COUNTRY_ALIASES = {
     "CAN": "Canada",
+    "CHL": "Chile",
     "ECUA": "Ecuador",
     "MEX": "Mexico",
     "UAE": "United Arab Emirates",

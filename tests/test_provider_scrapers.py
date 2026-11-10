@@ -71,6 +71,7 @@ def test_cato_normalizes_known_city_and_country_aliases(monkeypatch):
         == "Mexico City, Mexico"
     )
     assert catonetworks.normalize_location_text("Quito, ECUA") == "Quito, Ecuador"
+    assert catonetworks.normalize_location_text("Santiago, CHL") == "Santiago, Chile"
 
 
 def test_checkpoint_normalization_keeps_pop_numbers_and_removes_footnotes(monkeypatch):
@@ -94,6 +95,36 @@ def test_checkpoint_build_geocode_queries_strips_pop_numbers(monkeypatch):
     ]
     assert checkpoint_geojson.build_geocode_queries("London 3, UK") == [
         "London, United Kingdom"
+    ]
+
+
+def test_checkpoint_ignores_superscript_footnotes(monkeypatch):
+    checkpoint_geojson = import_provider_module(monkeypatch, "checkpoint_geojson")
+    html = """
+    <table><tr><td><ul>
+      <li>Ashburn 1, VA, USA<sup>1</sup></li>
+      <li>London 3, UK<sup>1</sup></li>
+      <li>Taipei 1<sup>1</sup></li>
+      <li>Ashburn 2, VA, USA</li>
+      <li>Manila, Philippines²</li>
+    </ul></td></tr></table>
+    """
+
+    locations = checkpoint_geojson.extract_checkpoint_locations(html)
+
+    assert locations == [
+        "Ashburn 1, VA, USA",
+        "London 3, UK",
+        "Taipei 1",
+        "Ashburn 2, VA, USA",
+        "Manila, Philippines",
+    ]
+    assert [checkpoint_geojson.build_geocode_queries(loc) for loc in locations] == [
+        ["Ashburn, VA, United States"],
+        ["London, United Kingdom"],
+        ["Taipei"],
+        ["Ashburn, VA, United States"],
+        ["Manila, Philippines"],
     ]
 
 
